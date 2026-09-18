@@ -33,6 +33,14 @@ object Messages {
             Component.translatable(key(if (skipped) "skipped" else "unaligned"), wanted.block.name),
         )
 
+    /** Tweakeroo's Accurate Block Placement is on; see [Tweakeroo]. Said once a session. */
+    fun tweakerooFighting() =
+        say("tweakeroo", Component.translatable(key("tweakeroo_fighting")), force = true)
+
+    /** A door whose hinge the doors beside it have already decided. */
+    fun hingeBlocked(wanted: BlockState) =
+        say("hinge:${wanted.block.descriptionId}", Component.translatable(key("hinge_blocked"), wanted.block.name))
+
     /**
      * Said at most once a session, by [Engagement], so it needs no help getting past the throttle —
      * and it is information rather than feedback, so it respects the setting that turns messages
