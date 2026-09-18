@@ -1,6 +1,9 @@
 package com.skystormer.aboutfaceeasyplace
 
 import net.minecraft.client.Minecraft
+import net.minecraft.world.level.block.CeilingHangingSignBlock
+import net.minecraft.world.level.block.WallHangingSignBlock
+import net.minecraft.world.level.block.state.BlockState
 
 /**
  * Decides whether this mod has any business in a placement.
@@ -36,6 +39,16 @@ object Engagement {
         if (Minecraft.getInstance().isLocalServer) return false
         return Litematica.effectiveProtocol() in UNSPOKEN
     }
+
+    /**
+     * Whether hanging signs get this mod's full treatment even though Litematica's own protocol is
+     * in force. In single player it is, and it gets hanging signs wrong: which way round, and
+     * whether they hang from chains.
+     */
+    fun alignsHangingSigns(): Boolean = Minecraft.getInstance().isLocalServer
+
+    fun isHangingSign(state: BlockState): Boolean =
+        state.block is CeilingHangingSignBlock || state.block is WallHangingSignBlock
 
     /**
      * Says once, when it becomes relevant, which protocol is being left to carry orientation.
