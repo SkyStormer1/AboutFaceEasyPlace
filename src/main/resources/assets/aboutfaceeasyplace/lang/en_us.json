@@ -10,5 +10,7 @@
   "config.aboutfaceeasyplace.show_messages": "Show action bar messages",
   "text.aboutfaceeasyplace.skipped": "Skipped %s: cannot face that way here",
   "text.aboutfaceeasyplace.unaligned": "Placed %s unaligned: cannot face that way here",
-  "config.aboutfaceeasyplace.verbose_logging": "Log every placement"
+  "config.aboutfaceeasyplace.verbose_logging": "Log every placement",
+  "text.aboutfaceeasyplace.hinge_blocked": "Skipped %s: the door beside it decides its hinge. Place this one first",
+  "text.aboutfaceeasyplace.tweakeroo_fighting": "Tweakeroo's Accurate Block Placement is on: turn it off while Easy Placing, it overrides block facing"
 }

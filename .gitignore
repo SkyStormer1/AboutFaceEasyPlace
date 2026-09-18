@@ -23,5 +23,3 @@ remappedSrc/
 .DS_Store
 Thumbs.db
 
-# Verification harness output
-verification/build/
