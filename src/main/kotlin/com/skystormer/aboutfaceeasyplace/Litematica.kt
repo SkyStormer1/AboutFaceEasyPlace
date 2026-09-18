@@ -1,7 +1,6 @@
 package com.skystormer.aboutfaceeasyplace
 
 import net.minecraft.world.level.BlockGetter
-import org.slf4j.LoggerFactory
 import java.lang.reflect.Method
 
 /**
@@ -26,13 +25,14 @@ import java.lang.reflect.Method
  */
 object Litematica {
 
-    private val LOGGER = LoggerFactory.getLogger("aboutfaceeasyplace")
-
     private const val SCHEMATIC_WORLD_HANDLER = "fi.dy.masa.litematica.world.SchematicWorldHandler"
     private const val PLACEMENT_HANDLER = "fi.dy.masa.litematica.util.PlacementHandler"
 
     /** Everything Litematica owns lives under here. */
     private const val LITEMATICA_PACKAGE = "fi.dy.masa.litematica."
+
+    /** Where both of Litematica's Easy Place implementations live. */
+    private const val EASY_PLACE_PACKAGE = "fi.dy.masa.litematica.util."
 
     /**
      * How far down the stack to look for Litematica.
@@ -49,32 +49,60 @@ object Litematica {
     var unavailable: Boolean = false
         private set
 
+    /** Litematica classes already mentioned in the log, so that each is mentioned only once. */
+    private val reportedInitiators = HashSet<String>()
+
     private val schematicWorldMethod: Method? by lazy { lookUp(SCHEMATIC_WORLD_HANDLER, "getSchematicWorld") }
     private val protocolMethod: Method? by lazy { lookUp(PLACEMENT_HANDLER, "getEffectiveProtocolVersion") }
 
     /**
-     * Whether the placement being made right now is Litematica's rather than the player's.
+     * The Litematica class that started the placement being made right now, or null if none did.
      *
-     * This is the only thing separating a block Easy Place is putting down from one the player is
-     * placing by hand, and it has to be exact in both directions: a placement wrongly claimed
-     * would turn a player's own block the wrong way, and one wrongly passed over is a schematic
-     * block left crooked.
+     * Looking at the stack is a blunter instrument than asking Litematica directly, and is used
+     * anyway, because Litematica has **two** Easy Place implementations and only one of them can be
+     * asked. `EasyPlaceUtils` raises a flag around its placement; the older `WorldUtils` path
+     * raises nothing — and that older path is the one that runs by default, because
+     * `easyPlacePostRewrite` defaults to off. A flag-based test would do nothing at all for most
+     * people.
      *
-     * It is answered by looking for Litematica on the call stack, which is a blunter instrument
-     * than asking Litematica directly and is used anyway, because Litematica has **two** Easy
-     * Place implementations and only one of them can be asked. `EasyPlaceUtils` raises a flag
-     * around its placement; the older `WorldUtils` path raises nothing — and that older path is
-     * the one that runs by default, because `easyPlacePostRewrite` defaults to off. A flag-based
-     * test would therefore do nothing at all for most people.
-     *
-     * Looking at the stack has neither problem. Both paths call the placement from a class under
-     * [LITEMATICA_PACKAGE], so both are caught, and so is whatever replaces them. A player's own
-     * right click never is: Litematica's own hook into this method is a mixin, and a mixin's
+     * The stack has neither problem, and it answers a more useful question besides: not just
+     * whether Litematica is placing, but which part of it. A player's own right click reaches this
+     * with no Litematica frame at all — Litematica's own hook into the placement is a mixin, and
      * injected code runs as a method **of the class it was merged into**, so it appears on the
      * stack as Minecraft rather than as Litematica.
      */
-    fun isPlacing(): Boolean = STACK_WALKER.walk { frames ->
-        frames.limit(STACK_SEARCH_DEPTH).anyMatch { it.className.startsWith(LITEMATICA_PACKAGE) }
+    fun placingFrom(): String? = STACK_WALKER.walk { frames ->
+        frames.limit(STACK_SEARCH_DEPTH)
+            .map { it.className }
+            .filter { it.startsWith(LITEMATICA_PACKAGE) }
+            .findFirst()
+            .orElse(null)
+    }
+
+    /**
+     * Whether [initiator] is a part of Litematica whose placements are this mod's business.
+     *
+     * Not every Litematica placement is an Easy Place one. Pasting a schematic puts a block down at
+     * a scratch position nearby purely to capture its block entity, and then takes it straight back
+     * out again; claiming a rotation for that would be meddling in something that has nothing to do
+     * with orientation, on a path that places in bulk.
+     *
+     * Both Easy Place implementations live in the same package, so that is the test. Anything else
+     * under Litematica is declined — and said so, once, because a future Litematica that moves Easy
+     * Place somewhere else would otherwise make this mod quietly stop working, which is exactly the
+     * failure that a flag-based test already produced once.
+     */
+    fun isEasyPlace(initiator: String): Boolean {
+        if (initiator.startsWith(EASY_PLACE_PACKAGE)) return true
+        if (reportedInitiators.add(initiator)) {
+            Log.info(
+                "{} is placing a block, which is not one of the Easy Place paths this mod knows " +
+                    "about ({}*), so it has been left alone. If Easy Place is no longer aligning " +
+                    "blocks, this is why.",
+                initiator, EASY_PLACE_PACKAGE,
+            )
+        }
+        return false
     }
 
     /** The schematic world, or null when no schematic is loaded. */
@@ -120,10 +148,9 @@ object Litematica {
     private fun standDown(what: String, cause: Throwable) {
         if (unavailable) return
         unavailable = true
-        LOGGER.error(
-            "About Face Easy Place: {}. This Litematica build is not one this mod knows how to " +
-                "read, so it is standing down for this session and leaving Easy Place untouched.",
-            what,
+        Log.error(
+            "$what. This Litematica build is not one this mod knows how to read, so it is " +
+                "standing down for this session and leaving Easy Place untouched.",
             cause,
         )
     }
