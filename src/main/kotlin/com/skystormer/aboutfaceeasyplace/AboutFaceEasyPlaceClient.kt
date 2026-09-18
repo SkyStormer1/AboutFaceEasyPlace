@@ -29,6 +29,10 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
 
     override fun onInitializeClient() {
         Config.load()
+        Log.info(
+            "loaded. enabled={}, skipImpossible={}, showMessages={}, verboseLogging={}",
+            Config.enabled, Config.skipImpossible, Config.showMessages, Config.verboseLogging,
+        )
 
         toggleKey = KeyMappingHelper.registerKeyMapping(
             KeyMapping(
@@ -42,12 +46,18 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
     }
 
     private fun onTick(client: Minecraft) {
-        if (client.player == null) {
+        val level = client.level
+        if (client.player == null || level == null) {
             // Leaving a server takes what was worked out about that server with it, so the next
-            // one is read fresh rather than judged by the last one.
+            // one is read fresh rather than judged by the last one, and anything still waiting to
+            // be checked refers to a world that has gone.
             Engagement.forget()
+            EasyPlaceHook.forget()
+            PlacementAudit.forget()
             return
         }
+
+        PlacementAudit.tick(level)
 
         // Consume every press rather than only the first: a key mapping counts presses, and one
         // left on the pile would fire the next time the player joined a world.
@@ -56,6 +66,7 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
         if (toggles % 2 == 1) {
             Config.enabled = !Config.enabled
             Config.save()
+            Log.info("toggled {} by keybind", if (Config.enabled) "on" else "off")
             Messages.toggled(Config.enabled)
         }
     }

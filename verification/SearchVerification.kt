@@ -2,6 +2,10 @@ package com.skystormer.aboutfaceeasyplace.verification
 
 import com.skystormer.aboutfaceeasyplace.Aligner
 import com.skystormer.aboutfaceeasyplace.BlockStates
+import com.skystormer.aboutfaceeasyplace.Config
+import com.skystormer.aboutfaceeasyplace.Log
+import com.skystormer.aboutfaceeasyplace.PlacementAudit
+import org.slf4j.RecordingLogger
 import net.minecraft.client.player.LocalPlayer
 import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
@@ -33,8 +37,11 @@ object SearchVerification {
     private val AXIS = Property<Direction.Axis>("axis")
     private val HALF = Property<Half>("half")
     private val HANGING = Property<Boolean>("hanging")
+    private val SHAPE = Property<RailShape>("shape")
 
     enum class Half { TOP, BOTTOM }
+
+    enum class RailShape { NORTH_SOUTH, EAST_WEST }
 
     private fun stateOf(block: Block, vararg values: Pair<Property<*>, Comparable<*>>) =
         BlockState(block, mapOf(*values))
@@ -74,8 +81,13 @@ object SearchVerification {
             stateOf(this, FACING to context.nearestLookingDirection.opposite)
     }
 
-    /** A log lies along the axis of the face that was clicked. */
-    private object Log : Block() {
+    /**
+     * A log lies along the axis of the face that was clicked.
+     *
+     * Named `Pillar` rather than `Log` because a stand-in block called `Log` shadows the mod's own
+     * logger inside this file, which is a confusing way to spend an afternoon.
+     */
+    private object Pillar : Block() {
         override fun getStateDefinition() = StateDefinition<Block, BlockState>(listOf(AXIS))
         override fun getStateForPlacement(context: BlockPlaceContext) =
             stateOf(this, AXIS to context.clickedFace.axis)
@@ -86,6 +98,22 @@ object SearchVerification {
         override fun getStateDefinition() = StateDefinition<Block, BlockState>(listOf(HANGING))
         override fun getStateForPlacement(context: BlockPlaceContext) =
             stateOf(this, HANGING to (context.clickedFace == Direction.DOWN))
+    }
+
+    /**
+     * A rail lies across the way the player is facing, and `shape` is the only property it has.
+     *
+     * The awkward case: `shape` is also what a staircase stores, where it is decided by neighbours
+     * rather than by the placement. A rail has nothing else to go on, so here it has to be matched;
+     * a staircase has a facing and a half, so there it must not be required.
+     */
+    private object Rail : Block() {
+        override fun getStateDefinition() = StateDefinition<Block, BlockState>(listOf(SHAPE))
+        override fun getStateForPlacement(context: BlockPlaceContext) = stateOf(
+            this,
+            SHAPE to if (context.horizontalDirection.axis == Direction.Axis.Z) RailShape.NORTH_SOUTH
+            else RailShape.EAST_WEST,
+        )
     }
 
     /** Stone: nothing to get wrong. */
@@ -133,7 +161,7 @@ object SearchVerification {
         )
         check(
             "log lying east to west",
-            Log, stateOf(Log, AXIS to Direction.Axis.X),
+            Pillar, stateOf(Pillar, AXIS to Direction.Axis.X),
             lookingYaw = 0f, expected = Expect.ALIGNED,
         )
         check(
@@ -145,6 +173,16 @@ object SearchVerification {
             "hopper facing east, reached by clicking the block below",
             Hopper, stateOf(Hopper, FACING to Direction.EAST),
             lookingYaw = 0f, expected = Expect.ALIGNED, clickNeighbourBelow = true,
+        )
+        check(
+            "rail running east to west, whose only property is shape",
+            Rail, stateOf(Rail, SHAPE to RailShape.EAST_WEST),
+            lookingYaw = 0f, expected = Expect.ALIGNED,
+        )
+        check(
+            "rail already running the right way",
+            Rail, stateOf(Rail, SHAPE to RailShape.NORTH_SOUTH),
+            lookingYaw = 0f, expected = Expect.LEAVE_ALONE,
         )
         check(
             "stone, which has no orientation",
@@ -164,8 +202,67 @@ object SearchVerification {
             }
         }
 
+        checkLogging()
+
         println(if (failures == 0) "\nAll checks passed." else "\n$failures check(s) FAILED.")
         if (failures != 0) throw AssertionError("$failures check(s) failed")
+    }
+
+    /**
+     * Runs the search and the audit with logging on, and renders every line that comes out.
+     *
+     * A log line with the wrong number of placeholders is invisible until the moment it fires,
+     * which is the moment someone is already trying to work out why a block went down crooked.
+     * This makes that a failure here instead.
+     */
+    private fun checkLogging() {
+        println()
+        RecordingLogger.reset()
+        Config.verboseLogging = true
+        try {
+            // A search that finds an answer, and one that cannot.
+            plan(Stairs, stateOf(Stairs, FACING to Direction.NORTH, HALF to Half.TOP), 0f)
+            val unsolvable = plan(Hopper, stateOf(Hopper, FACING to Direction.UP), 0f)
+
+            // The audit, on both the agreeing and the disagreeing paths.
+            val aligned = plan(Hopper, stateOf(Hopper, FACING to Direction.EAST), 0f)
+                    as? Aligner.Outcome.Aligned
+            if (aligned == null) {
+                failures++
+                println("logging: expected an aligned hopper to audit")
+            } else {
+                PlacementAudit.expect(aligned)
+                repeat(10) { PlacementAudit.tick { _ -> aligned.wanted } }
+                PlacementAudit.expect(aligned)
+                repeat(10) { PlacementAudit.tick { _ -> stateOf(Hopper, FACING to Direction.WEST) } }
+            }
+
+            Log.info("the unsolvable case reported: {}", unsolvable)
+        } finally {
+            Config.verboseLogging = false
+        }
+
+        RecordingLogger.LINES.forEach { println("  $it") }
+        if (RecordingLogger.PROBLEMS.isEmpty()) {
+            println(String.format("%-52s %s", "log lines render with matching placeholders", "ok"))
+        } else {
+            failures += RecordingLogger.PROBLEMS.size
+            RecordingLogger.PROBLEMS.forEach { println("  FAILED: $it") }
+        }
+    }
+
+    private fun plan(block: Block, wanted: BlockState, yaw: Float): Aligner.Outcome {
+        val player = LocalPlayer()
+        player.setYRot(yaw)
+        player.setXRot(0f)
+        player.held = ItemStack(BlockItem(block))
+        BlockPlaceContext.SOLID.clear()
+        val hit = BlockHitResult(
+            Vec3(TARGET.x + 0.5, TARGET.y + 1.0, TARGET.z + 0.5), Direction.UP, TARGET, false
+        )
+        return Aligner.plan(player, InteractionHand.MAIN_HAND, hit) { pos ->
+            if (pos == TARGET) wanted else stateOf(Plain)
+        }
     }
 
     private enum class Expect { ALIGNED, LEAVE_ALONE, UNSOLVABLE, ANY_CORRECT }
@@ -209,10 +306,11 @@ object SearchVerification {
             is Aligner.Outcome.LeaveAlone ->
                 if (expected == Expect.LEAVE_ALONE) pass()
                 else if (expected == Expect.ANY_CORRECT && produces(player, hand, original, block) == wanted) pass()
-                else fail("left alone, but the block would land as ${produces(player, hand, original, block)}")
+                else fail("left alone (${outcome.why}), but the block would land as ${produces(player, hand, original, block)}")
 
             is Aligner.Outcome.Unsolvable ->
-                if (expected == Expect.UNSOLVABLE) pass() else fail("reported unsolvable")
+                if (expected == Expect.UNSOLVABLE) pass()
+                else fail("reported unsolvable; the closest any candidate got was ${outcome.closest}")
 
             is Aligner.Outcome.Aligned -> {
                 // The claim is only worth anything if it really produces the wanted state, so the

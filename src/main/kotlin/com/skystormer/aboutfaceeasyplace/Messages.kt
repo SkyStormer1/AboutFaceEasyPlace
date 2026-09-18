@@ -21,14 +21,32 @@ object Messages {
     fun toggled(enabled: Boolean) =
         say("toggle", Component.translatable(key(if (enabled) "enabled" else "disabled")), force = true)
 
-    fun unsupported(wanted: BlockState) =
-        say("unsupported:${wanted.block.descriptionId}", Component.translatable(key("unsupported"), wanted.block.name))
+    /**
+     * Says that a block could not be aligned, and — accurately — what became of it.
+     *
+     * The two cases read differently on purpose. A skipped block is still to do and will be
+     * retried; a placed one is already down and facing the wrong way, and will not be.
+     */
+    fun unaligned(wanted: BlockState, skipped: Boolean) =
+        say(
+            "unaligned:${wanted.block.descriptionId}",
+            Component.translatable(key(if (skipped) "skipped" else "unaligned"), wanted.block.name),
+        )
 
+    /**
+     * Said at most once a session, by [Engagement], so it needs no help getting past the throttle —
+     * and it is information rather than feedback, so it respects the setting that turns messages
+     * off. The same thing is in the log either way.
+     */
     fun protocolNegotiated(protocol: String) =
-        say("protocol", Component.translatable(key("protocol_negotiated"), protocol), force = true)
+        say("protocol", Component.translatable(key("protocol_negotiated"), protocol))
 
     private fun key(name: String) = "text.${AboutFaceEasyPlaceClient.MOD_ID}.$name"
 
+    /**
+     * @param force for feedback the player directly asked for by pressing a key, which is neither
+     *   throttled nor subject to the setting that silences everything else.
+     */
     private fun say(tag: String, message: Component, force: Boolean = false) {
         if (!force && !Config.showMessages) return
         val now = System.currentTimeMillis()

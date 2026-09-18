@@ -27,6 +27,9 @@ object Engagement {
 
     private var advised = false
 
+    /** The protocol Litematica has settled on, for the log to quote. */
+    fun protocol(): String? = Litematica.effectiveProtocol()
+
     fun shouldAlign(): Boolean {
         // Single player runs the placement through the same client that decided what to place, so
         // Litematica's V3 protocol is honoured in full and there is nothing here to fix.

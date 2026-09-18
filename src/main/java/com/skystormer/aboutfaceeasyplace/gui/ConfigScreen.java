@@ -33,7 +33,7 @@ public class ConfigScreen extends Screen {
     @Override
     protected void init() {
         int left = this.width / 2 - WIDTH / 2;
-        int top = Math.max(40, this.height / 2 - (ROW + GAP) * 2);
+        int top = Math.max(40, this.height / 2 - (ROW + GAP) * 3);
 
         this.addRenderableWidget(new StringWidget(left, top - 28, WIDTH, ROW, this.getTitle(), this.font));
 
@@ -43,6 +43,8 @@ public class ConfigScreen extends Screen {
         this.addRenderableWidget(toggle(left, y, "skip_impossible", Config.getSkipImpossible(), Config::setSkipImpossible));
         y += ROW + GAP;
         this.addRenderableWidget(toggle(left, y, "show_messages", Config.getShowMessages(), Config::setShowMessages));
+        y += ROW + GAP;
+        this.addRenderableWidget(toggle(left, y, "verbose_logging", Config.getVerboseLogging(), Config::setVerboseLogging));
         y += (ROW + GAP) * 2;
 
         this.addRenderableWidget(

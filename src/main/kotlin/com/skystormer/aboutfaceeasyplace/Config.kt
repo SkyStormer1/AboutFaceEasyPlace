@@ -4,7 +4,6 @@ import com.google.gson.GsonBuilder
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import net.fabricmc.loader.api.FabricLoader
-import org.slf4j.LoggerFactory
 import java.nio.file.Files
 import java.nio.file.Path
 
@@ -21,7 +20,6 @@ import java.nio.file.Path
  */
 object Config {
 
-    private val LOGGER = LoggerFactory.getLogger("aboutfaceeasyplace")
     private val GSON = GsonBuilder().setPrettyPrinting().create()
 
     private val file: Path
@@ -44,6 +42,17 @@ object Config {
     @JvmStatic
     var showMessages: Boolean = true
 
+    /**
+     * Whether to write a line per placement to the log, and to check each one afterwards.
+     *
+     * Off by default because Easy Place places faster than a log is worth reading. On, it is the
+     * thing to turn on before reporting that a block came out wrong: it records what was wanted,
+     * what would have landed without the mod, what was claimed instead, and — a moment later —
+     * what the server actually did.
+     */
+    @JvmStatic
+    var verboseLogging: Boolean = false
+
     fun load() {
         val path = file
         try {
@@ -55,10 +64,11 @@ object Config {
             enabled = json.boolean("enabled", enabled)
             skipImpossible = json.boolean("skipImpossible", skipImpossible)
             showMessages = json.boolean("showMessages", showMessages)
+            verboseLogging = json.boolean("verboseLogging", verboseLogging)
         } catch (e: Exception) {
             // A config that cannot be read is not worth failing to start over. The defaults are
             // the ones most people would pick anyway.
-            LOGGER.warn("About Face Easy Place: could not read {}; using defaults.", path, e)
+            Log.warn("could not read {}; using defaults. ({})", path, e.toString())
         }
     }
 
@@ -71,10 +81,11 @@ object Config {
                 addProperty("enabled", enabled)
                 addProperty("skipImpossible", skipImpossible)
                 addProperty("showMessages", showMessages)
+                addProperty("verboseLogging", verboseLogging)
             }
             Files.writeString(path, GSON.toJson(json))
         } catch (e: Exception) {
-            LOGGER.warn("About Face Easy Place: could not write {}.", path, e)
+            Log.warn("could not write {}. ({})", path, e.toString())
         }
     }
 
