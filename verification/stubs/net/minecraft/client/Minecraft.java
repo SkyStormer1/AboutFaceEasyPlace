@@ -6,6 +6,7 @@ import org.jetbrains.annotations.Nullable;
 public class Minecraft {
     public static Minecraft getInstance() { return null; }
     @Nullable public LocalPlayer player;
+    @Nullable public net.minecraft.client.multiplayer.ClientLevel level;
     @Nullable public ClientPacketListener getConnection() { return null; }
     public Gui getGui() { return null; }
     public boolean isLocalServer() { return false; }

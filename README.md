@@ -214,12 +214,42 @@ Behind Mod Menu's cog, or at `config/aboutfaceeasyplace.json`:
 | **Align Easy Place orientation** | on | The master switch. |
 | **Skip blocks that cannot be aligned** | on | Declines a placement whose orientation no legal click and look can produce, instead of letting it land wrong. Off, the block is placed however it comes out. |
 | **Show action bar messages** | on | The occasional line explaining a decline, or that Litematica's own protocol is in force. |
+| **Log every placement** | off | Writes what was wanted, what would have landed, what was claimed instead — and, half a second later, what the server actually did. See [Diagnostics](#diagnostics). |
 
 The master switch is also on a keybind, under **Options ▸ Controls ▸ About Face Easy Place**, so it
 can be taken out of the way mid-build without opening a menu. It starts **unbound**, so it cannot
 collide with any of Litematica's own keys.
 
 Mod Menu is optional. Without it, the keybind and the config file do the same job.
+
+## Diagnostics
+
+Switch on **Log every placement** before reporting that a block came out wrong. It turns
+`latest.log` into a record of the mod's reasoning, one line per placement:
+
+```
+[About Face Easy Place] search at 118,71,-40: wanted minecraft:oak_stairs[facing=north,half=top],
+  would have landed [facing=south,half=bottom], 62 of 258 candidates simulated
+  (43 clicks x 6 rotations), took 177us -> [facing=north,half=top]
+[About Face Easy Place] aligning oak_stairs at 118,71,-40: claiming yaw 180.0 pitch 0.0
+  and a click on NORTH of 118,71,-40 -> expecting [facing=north,half=top]
+[About Face Easy Place] confirmed: oak_stairs at 118,71,-40 settled as the schematic asks
+```
+
+That last line is the one that matters. Half a second after each placement the mod looks at what is
+actually in the world and compares it to what it claimed — so a plan that was wrong and a plan that
+was right but was not believed produce different output:
+
+```
+[About Face Easy Place] at 118,71,-40 the server settled on [facing=south], not the [facing=north]
+  that was claimed and expected. Disagreeing on: facing=south (wanted north)
+```
+
+A line like that is worth reporting verbatim. It is the difference between "the mod does not work"
+and "the server ignored a claimed rotation", which are different bugs with different fixes.
+
+Declines are logged whether or not verbose logging is on, with the nearest any legal click and look
+could get — usually the whole explanation.
 
 ## Troubleshooting
 
@@ -230,6 +260,7 @@ Mod Menu is optional. Without it, the keybind and the config file do the same jo
 | *"Cannot place … facing that way here"* | No legal click and look produces that orientation — a hopper facing up, most likely. The block is skipped rather than placed wrongly. |
 | Nothing happens at all | Check the log for `About Face Easy Place: could not find …`, which means this Litematica build is one the mod cannot read, and it has stood down for the session. |
 | Blocks still land wrong | Easy Place has to actually be running: `easyPlaceMode` on, the activation key held, and the tool mode not set to Rebuild. This mod only ever touches placements Litematica is making. |
+| `… is placing a block, which is not one of the Easy Place paths this mod knows about` | A Litematica build that has moved Easy Place somewhere this mod does not recognise. It has left that placement alone rather than guess. Worth reporting with the class name from the log. |
 
 ## Building
 
