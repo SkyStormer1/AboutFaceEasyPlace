@@ -1,9 +1,6 @@
 package com.skystormer.aboutfaceeasyplace
 
 import net.minecraft.client.Minecraft
-import net.minecraft.world.level.block.CeilingHangingSignBlock
-import net.minecraft.world.level.block.WallHangingSignBlock
-import net.minecraft.world.level.block.state.BlockState
 
 /**
  * Decides whether this mod has any business in a placement.
@@ -14,7 +11,8 @@ import net.minecraft.world.level.block.state.BlockState
  * and on slabs-only when it finds nothing — which is the vanilla server case, and the only one
  * where orientation is going unspoken. Reading the protocol Litematica settled on is therefore a
  * better test than any detecting this mod could do for itself, and it costs nothing to keep right
- * when the server changes.
+ * when the server changes. Single player is the exception: its V3 turned out to leave too much
+ * wrong in practice, so there the mod acts as it would on a vanilla server.
  *
  * Standing aside on a Carpet or Servux server is deliberate rather than cautious. Those protocols
  * carry things a click and a look cannot: a repeater's delay, a comparator's mode. Taking over
@@ -34,21 +32,13 @@ object Engagement {
     fun protocol(): String? = Litematica.effectiveProtocol()
 
     fun shouldAlign(): Boolean {
-        // Single player runs the placement through the same client that decided what to place, so
-        // Litematica's V3 protocol is honoured in full and there is nothing here to fix.
-        if (Minecraft.getInstance().isLocalServer) return false
+        // Single player is treated as the vanilla server it is. Litematica settles on V3 there, but
+        // in practice that leaves sign, skull and banner rotations, hanging lanterns and hanging
+        // signs wrong, and opens containers; this mod's way of placing gets them right, and with
+        // no anti-cheat in the way there is no cost to it.
+        if (Minecraft.getInstance().isLocalServer) return true
         return Litematica.effectiveProtocol() in UNSPOKEN
     }
-
-    /**
-     * Whether hanging signs get this mod's full treatment even though Litematica's own protocol is
-     * in force. In single player it is, and it gets hanging signs wrong: which way round, and
-     * whether they hang from chains.
-     */
-    fun alignsHangingSigns(): Boolean = Minecraft.getInstance().isLocalServer
-
-    fun isHangingSign(state: BlockState): Boolean =
-        state.block is CeilingHangingSignBlock || state.block is WallHangingSignBlock
 
     /**
      * Says once, when it becomes relevant, which protocol is being left to carry orientation.
@@ -63,7 +53,7 @@ object Engagement {
      * who has never turned Easy Place on never hears about any of this.
      */
     fun adviseIfProtocolNegotiated() {
-        if (advised) return
+        if (advised || Minecraft.getInstance().isLocalServer) return
         val protocol = Litematica.effectiveProtocol() ?: return
         if (protocol !in NEGOTIATED) return
         advised = true

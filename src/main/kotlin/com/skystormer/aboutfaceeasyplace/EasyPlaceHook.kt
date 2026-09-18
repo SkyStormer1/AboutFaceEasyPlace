@@ -77,9 +77,6 @@ object EasyPlaceHook {
         Engagement.adviseIfProtocolNegotiated()
         if (!Engagement.shouldAlign()) {
             val wanted = wantedAt(player, hand, hit) ?: return null
-            if (Engagement.alignsHangingSigns() && Engagement.isHangingSign(wanted)) {
-                return align(gameMode, player, hand, hit)
-            }
             // Litematica's own protocol carries the orientation, but not what a block only gets by
             // being used after it is down. Those are made once the server's answer has arrived.
             if (Adjustments.hasAdjustable(wanted)) FollowUp.expect(targetOf(player, hand, hit), wanted, hand)
