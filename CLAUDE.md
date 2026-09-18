@@ -40,6 +40,7 @@ whether they are sneaking. The mod searches for values of those that make vanill
 | `EasyPlaceHook.kt` | Placement, claims, post-placement uses, vanilla-click handling. |
 | `RotationHold.kt`, `Anticipation.kt` | Claims that must stand across a server tick. |
 | `Adjustments.kt` | Settings that only exist after placement. |
+| `FollowUp.kt` | The same, for blocks Litematica placed with its own protocol (single player, Carpet/Servux): waits for the server's answer before counting uses. |
 | `Interaction.kt` | Which blocks must never be clicked to place against. |
 | `WallMounts.kt` + `LitematicaEasyPlaceUtilsMixin` | Lifts Litematica's support-block rule for blocks that stand on their own. |
 | `Litematica.kt` | Every reflective read of Litematica. |

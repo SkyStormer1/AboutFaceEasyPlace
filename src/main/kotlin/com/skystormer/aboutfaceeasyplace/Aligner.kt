@@ -183,7 +183,7 @@ object Aligner {
      *   search can be exercised against a world of one's own choosing.
      * @param stack what is being placed. The item in [hand] when Litematica is placing; the item the
      *   schematic calls for when this is only looking ahead, before Litematica has picked it.
-     * @param believed the rotation the server currently believes the player has — their own, or a
+     * @param believed the rotation the server currently believes the player has â€” their own, or a
      *   claim already standing. A placement made at this rotation claims nothing.
      * @param heads every yaw the server's copy of the player's head might hold right now. More than
      *   one when the player has just turned, because the server only updates it once a tick; a
@@ -268,14 +268,14 @@ object Aligner {
         try {
             search@ for (sneak in sneaks) {
                 // Clicks outer, rotations inner. Litematica chose its click for reasons of its
-                // own — a particular half for a slab, a face for a hopper — and a rotation claim
+                // own â€” a particular half for a slab, a face for a hopper â€” and a rotation claim
                 // overrides nothing, so every rotation is tried against Litematica's own click
                 // before any other click is considered.
                 for (hit in hits) {
                     for (rotation in rotations) {
                         if (simulations >= SIMULATION_BUDGET) break@search
                         // The claim only reaches the body, so the head stays wherever the server
-                        // might have it — and the answer has to hold for every one of those.
+                        // might have it â€” and the answer has to hold for every one of those.
                         val placed = simulate(hit, rotation, sneak, heads.first()) ?: continue
                         producedAnything = true
                         if (heads.size > 1 && heads.drop(1).any { simulate(hit, rotation, sneak, it) != placed }) continue
