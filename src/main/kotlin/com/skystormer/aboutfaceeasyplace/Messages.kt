@@ -23,8 +23,8 @@ object Messages {
     fun unsupported(wanted: BlockState) =
         say("unsupported:${wanted.block.descriptionId}", Component.translatable(key("unsupported"), wanted.block.name))
 
-    fun protocolNegotiated() =
-        say("protocol", Component.translatable(key("protocol_negotiated")), force = true)
+    fun protocolNegotiated(protocol: String) =
+        say("protocol", Component.translatable(key("protocol_negotiated"), protocol), force = true)
 
     private fun key(name: String) = "text.${AboutFaceEasyPlaceClient.MOD_ID}.$name"
 

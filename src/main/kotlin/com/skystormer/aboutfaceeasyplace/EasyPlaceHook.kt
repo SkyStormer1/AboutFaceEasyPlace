@@ -7,6 +7,7 @@ import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
 import net.minecraft.world.phys.BlockHitResult
+import org.slf4j.LoggerFactory
 
 /**
  * Sits in front of the one placement Litematica makes for Easy Place, and nothing else.
@@ -54,7 +55,22 @@ object EasyPlaceHook {
 
         val schematic = Litematica.schematicWorld() ?: return null
 
-        return when (val outcome = Aligner.plan(player, hand, hit, schematic)) {
+        // The search asks blocks what they would place, and a modded block is free to answer that
+        // question badly. An exception escaping here would surface inside Litematica's placement
+        // loop and take Easy Place down with it, so one is caught, reported once, and treated as
+        // "nothing to do" — leaving Litematica's own placement to go ahead exactly as it would
+        // have without this mod installed.
+        val outcome = try {
+            Aligner.plan(player, hand, hit, schematic)
+        } catch (e: Exception) {
+            reportSearchFailure(e)
+            return null
+        } catch (e: LinkageError) {
+            reportSearchFailure(e)
+            return null
+        }
+
+        return when (outcome) {
             is Aligner.Outcome.LeaveAlone -> null
             is Aligner.Outcome.Unsolvable -> {
                 Messages.unsupported(outcome.wanted)
@@ -103,4 +119,16 @@ object EasyPlaceHook {
 
     private fun rotationPacket(yaw: Float, pitch: Float, player: LocalPlayer) =
         ServerboundMovePlayerPacket.Rot(yaw, pitch, player.onGround(), false)
+
+    private var reportedSearchFailure = false
+
+    private fun reportSearchFailure(cause: Throwable) {
+        if (reportedSearchFailure) return
+        reportedSearchFailure = true
+        LoggerFactory.getLogger("aboutfaceeasyplace").error(
+            "About Face Easy Place: a block threw while being asked what it would place. That " +
+                "placement has been left to Litematica. Further occurrences are not logged.",
+            cause,
+        )
+    }
 }
