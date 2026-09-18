@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "com.skystormer.aboutfaceeasyplace.mixin",
+  "compatibilityLevel": "JAVA_${java_version}",
+  "client": [
+    "MultiPlayerGameModeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

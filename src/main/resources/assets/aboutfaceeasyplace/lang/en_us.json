@@ -1,0 +1,8 @@
+{
+  "key.categories.aboutfaceeasyplace": "About Face Easy Place",
+  "key.aboutfaceeasyplace.toggle": "Toggle placement alignment",
+  "text.aboutfaceeasyplace.enabled": "About Face Easy Place: on",
+  "text.aboutfaceeasyplace.disabled": "About Face Easy Place: off",
+  "text.aboutfaceeasyplace.unsupported": "Cannot place %s facing that way here",
+  "text.aboutfaceeasyplace.protocol_negotiated": "Litematica's easy place protocol is set by hand; set it to Auto if blocks fail to appear"
+}
