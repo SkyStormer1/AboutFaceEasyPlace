@@ -9,4 +9,5 @@ public class Minecraft {
     @Nullable public ClientPacketListener getConnection() { return null; }
     public Gui getGui() { return null; }
     public boolean isLocalServer() { return false; }
+    public void setScreen(net.minecraft.client.gui.screens.Screen screen) {}
 }

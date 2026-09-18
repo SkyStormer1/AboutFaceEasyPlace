@@ -14,21 +14,22 @@ import org.lwjgl.glfw.GLFW
  *
  * There is nothing to turn on. Litematica decides when Easy Place runs and what belongs where;
  * this mod only steps in for the moment a block is placed, and only where the orientation would
- * otherwise go unsaid. The toggle exists so it can be taken back out of the way without a restart,
- * and starts unbound so that it cannot collide with any of Litematica's own keys.
+ * otherwise go unsaid.
+ *
+ * The settings live behind Mod Menu, and the main switch is also on a keybind so it can be taken
+ * out of the way mid-build without opening anything. The key starts unbound, so that it cannot
+ * collide with any of Litematica's own.
  */
 object AboutFaceEasyPlaceClient : ClientModInitializer {
 
     const val MOD_ID = "aboutfaceeasyplace"
 
-    /** Whether the mod is doing anything. Toggled by [toggleKey], on by default. */
-    var enabled: Boolean = true
-        private set
-
     lateinit var toggleKey: KeyMapping
         private set
 
     override fun onInitializeClient() {
+        Config.load()
+
         toggleKey = KeyMappingHelper.registerKeyMapping(
             KeyMapping(
                 "key.$MOD_ID.toggle",
@@ -53,8 +54,9 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
         var toggles = 0
         while (toggleKey.consumeClick()) toggles++
         if (toggles % 2 == 1) {
-            enabled = !enabled
-            Messages.toggled(enabled)
+            Config.enabled = !Config.enabled
+            Config.save()
+            Messages.toggled(Config.enabled)
         }
     }
 }

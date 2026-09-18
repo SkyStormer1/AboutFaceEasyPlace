@@ -4,5 +4,9 @@
   "text.aboutfaceeasyplace.enabled": "About Face Easy Place: on",
   "text.aboutfaceeasyplace.disabled": "About Face Easy Place: off",
   "text.aboutfaceeasyplace.unsupported": "Cannot place %s facing that way here",
-  "text.aboutfaceeasyplace.protocol_negotiated": "Litematica is using its %s placement protocol; if blocks fail to appear, set easyPlaceProtocolVersion to Auto"
+  "text.aboutfaceeasyplace.protocol_negotiated": "Litematica is using its %s placement protocol; if blocks fail to appear, set easyPlaceProtocolVersion to Auto",
+  "config.aboutfaceeasyplace.title": "About Face Easy Place",
+  "config.aboutfaceeasyplace.enabled": "Align Easy Place orientation",
+  "config.aboutfaceeasyplace.skip_impossible": "Skip blocks that cannot be aligned",
+  "config.aboutfaceeasyplace.show_messages": "Show action bar messages"
 }

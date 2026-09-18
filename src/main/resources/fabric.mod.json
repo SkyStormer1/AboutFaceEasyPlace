@@ -20,6 +20,9 @@
         "value": "com.skystormer.aboutfaceeasyplace.AboutFaceEasyPlaceClient",
         "adapter": "kotlin"
       }
+    ],
+    "modmenu": [
+      "com.skystormer.aboutfaceeasyplace.gui.ModMenuIntegration"
     ]
   },
   "mixins": [
@@ -32,5 +35,8 @@
     "litematica": ">=${litematica_version}",
     "minecraft": "${minecraft_version}",
     "java": ">=${java_version}"
+  },
+  "suggests": {
+    "modmenu": "*"
   }
 }
