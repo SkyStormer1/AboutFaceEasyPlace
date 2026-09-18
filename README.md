@@ -79,7 +79,6 @@ Litematica comes back to it.
   block behind it, even though it survives the wall being removed later.
 - **A door's hinge next to another door.** The doors beside it decide it. If one is skipped with
   *"the door beside it decides its hinge"*, place that door before its neighbour.
-- **A hopper facing up.** No such block exists.
 - **Powered state.** Whether something is powered comes from the circuit, not the placement.
 
 </details>
