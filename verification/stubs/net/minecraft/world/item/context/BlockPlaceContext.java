@@ -11,8 +11,12 @@ public class BlockPlaceContext extends UseOnContext {
     public BlockPlaceContext(Player player, InteractionHand hand, ItemStack stack, BlockHitResult hit) {
         this.player = player; this.hit = hit;
     }
-    /** The test world is empty, so the clicked block is always replaceable and keeps its position. */
-    public BlockPos getClickedPos() { return hit.getBlockPos(); }
+    /** Positions the test world treats as solid, so that a click on them places beyond them. */
+    public static final java.util.Set<BlockPos> SOLID = new java.util.HashSet<>();
+    public BlockPos getClickedPos() {
+        BlockPos clicked = hit.getBlockPos();
+        return SOLID.contains(clicked) ? clicked.relative(hit.getDirection()) : clicked;
+    }
     public Direction getClickedFace() { return hit.getDirection(); }
     public Vec3 getClickLocation() { return hit.getLocation(); }
     public Direction getHorizontalDirection() { return Direction.fromYRot(player.getYRot()); }

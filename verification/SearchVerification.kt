@@ -32,6 +32,7 @@ object SearchVerification {
     private val FACING = Property<Direction>("facing")
     private val AXIS = Property<Direction.Axis>("axis")
     private val HALF = Property<Half>("half")
+    private val HANGING = Property<Boolean>("hanging")
 
     enum class Half { TOP, BOTTOM }
 
@@ -78,6 +79,13 @@ object SearchVerification {
         override fun getStateDefinition() = StateDefinition<Block, BlockState>(listOf(AXIS))
         override fun getStateForPlacement(context: BlockPlaceContext) =
             stateOf(this, AXIS to context.clickedFace.axis)
+    }
+
+    /** A lantern hangs when the face clicked was the underside of the block above. */
+    private object Lantern : Block() {
+        override fun getStateDefinition() = StateDefinition<Block, BlockState>(listOf(HANGING))
+        override fun getStateForPlacement(context: BlockPlaceContext) =
+            stateOf(this, HANGING to (context.clickedFace == Direction.DOWN))
     }
 
     /** Stone: nothing to get wrong. */
@@ -129,6 +137,16 @@ object SearchVerification {
             lookingYaw = 0f, expected = Expect.ALIGNED,
         )
         check(
+            "hanging lantern, whose orientation is a boolean",
+            Lantern, stateOf(Lantern, HANGING to true),
+            lookingYaw = 0f, expected = Expect.ALIGNED,
+        )
+        check(
+            "hopper facing east, reached by clicking the block below",
+            Hopper, stateOf(Hopper, FACING to Direction.EAST),
+            lookingYaw = 0f, expected = Expect.ALIGNED, clickNeighbourBelow = true,
+        )
+        check(
             "stone, which has no orientation",
             Plain, stateOf(Plain),
             lookingYaw = 0f, expected = Expect.LEAVE_ALONE,
@@ -152,16 +170,37 @@ object SearchVerification {
 
     private enum class Expect { ALIGNED, LEAVE_ALONE, UNSOLVABLE, ANY_CORRECT }
 
-    private fun check(name: String, block: Block, wanted: BlockState, lookingYaw: Float, expected: Expect) {
+    private fun check(
+        name: String,
+        block: Block,
+        wanted: BlockState,
+        lookingYaw: Float,
+        expected: Expect,
+        clickNeighbourBelow: Boolean = false,
+    ) {
         val player = LocalPlayer()
         player.setYRot(lookingYaw)
         player.setXRot(0f)
         player.held = ItemStack(BlockItem(block))
 
         val hand = InteractionHand.MAIN_HAND
-        val original = BlockHitResult(
-            Vec3(TARGET.x + 0.5, TARGET.y + 1.0, TARGET.z + 0.5), Direction.UP, TARGET, false
-        )
+
+        // Litematica does not always click the target itself. With `easyPlaceClickAdjacent`, and
+        // for blocks that need something to stand on, it clicks a neighbour and lets the block
+        // land in the space beyond — which leaves the clicked face carrying the position rather
+        // than the orientation.
+        BlockPlaceContext.SOLID.clear()
+        val original = if (clickNeighbourBelow) {
+            val support = TARGET.relative(Direction.DOWN)
+            BlockPlaceContext.SOLID.add(support)
+            BlockHitResult(
+                Vec3(support.x + 0.5, support.y + 1.0, support.z + 0.5), Direction.UP, support, false
+            )
+        } else {
+            BlockHitResult(
+                Vec3(TARGET.x + 0.5, TARGET.y + 1.0, TARGET.z + 0.5), Direction.UP, TARGET, false
+            )
+        }
         val schematic = BlockGetter { pos -> if (pos == TARGET) wanted else stateOf(Plain) }
 
         val outcome = Aligner.plan(player, hand, original, schematic)

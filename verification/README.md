@@ -12,8 +12,15 @@ against them directly.
 ./run.sh
 ```
 
-Each case ends by replaying the plan the search returned and checking that the block really lands
-in the wanted state, so a plan that merely looks plausible does not pass.
+Thirty-four cases run. Each ends by replaying the plan the search returned and checking that the
+block really lands in the wanted state, so a plan that merely looks plausible does not pass.
+
+The cases are chosen to cover each way a block can take its orientation: from the look direction
+(stairs, furnaces), from the clicked face (hoppers, logs, lanterns), from both at once (observers),
+from a boolean rather than a direction (lanterns), from a click on a neighbouring block rather than
+the target (a hopper placed against the block below it), and from nothing at all (stone). Every
+horizontal facing is checked from six starting rotations, which is where an off-by-one in the yaw
+convention would show up and a single spot check would not.
 
 **What this does not prove.** The stand-in blocks are written from vanilla's placement rules, not
 taken from Minecraft, and the stubs are written to the signatures Minecraft 26.2 is understood to

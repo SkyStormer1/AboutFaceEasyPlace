@@ -86,10 +86,14 @@ object Aligner {
      * `type` is here for slabs, and picks up chests and piston heads as collateral. That is
      * harmless — a property no candidate placement can change is dropped before matching, so a
      * chest half that only a neighbouring chest can decide never stops a chest being placed.
+     *
+     * `hanging` is the one that is easy to miss: a lantern is the only common block whose
+     * orientation is stored as a boolean rather than as a direction, so neither the direction rule
+     * nor the rest of these names would catch it.
      */
     private val PLACEMENT_PROPERTIES = setOf(
         "facing", "axis", "half", "type", "face", "hinge",
-        "orientation", "rotation", "attachment", "vertical_direction",
+        "orientation", "rotation", "attachment", "vertical_direction", "hanging",
     )
 
     /**
@@ -147,12 +151,16 @@ object Aligner {
         val realPitch = player.xRot
         val realHead = player.yHeadRot
         try {
-            outer@ for (rotation in rotations) {
-                player.yRot = rotation.yaw
-                player.yHeadRot = rotation.yaw
-                player.xRot = rotation.pitch
+            // Clicks outer, rotations inner. Litematica chose its click for reasons of its own —
+            // a supporting block for a torch, a particular half for a slab — and a rotation claim
+            // overrides nothing, so every rotation is tried against Litematica's own click before
+            // any other click is considered.
+            outer@ for (hit in hits) {
+                for (rotation in rotations) {
+                    player.yRot = rotation.yaw
+                    player.yHeadRot = rotation.yaw
+                    player.xRot = rotation.pitch
 
-                for (hit in hits) {
                     val placed = block.getStateForPlacement(BlockPlaceContext(player, hand, stack, hit))
                         ?: continue
                     val placement = Placement(hit, rotation)
@@ -239,15 +247,27 @@ object Aligner {
     ): List<BlockHitResult> {
         val clickPos = original.blockPos
         val stack = player.getItemInHand(hand)
-        val candidates = ArrayList<BlockHitResult>(1 + Direction.entries.size * FACE_POINTS.size)
+        val candidates = ArrayList<BlockHitResult>()
 
         candidates += original
-        for (face in facesFrom(original.direction)) {
-            for ((across, up) in FACE_POINTS) {
-                candidates += BlockHitResult(pointOnFace(clickPos, face, across, up), face, clickPos, false)
+
+        // Litematica's own block first, then — where that was a neighbour rather than the target
+        // itself — the target. Clicking the space a block is going into is a click a vanilla
+        // server accepts as readily as any other, and without it a hopper or a log would have no
+        // face left to choose from whenever Litematica had clicked something else to reach it,
+        // which is what `easyPlaceClickAdjacent` makes it do for every block.
+        val positions = if (clickPos == targetPos) listOf(clickPos) else listOf(clickPos, targetPos)
+
+        for (position in positions) {
+            for (face in facesFrom(original.direction)) {
+                for ((across, up) in FACE_POINTS) {
+                    candidates += BlockHitResult(pointOnFace(position, face, across, up), face, position, false)
+                }
             }
         }
 
+        // The invariant that makes all of this safe to do blind: whatever is claimed, the block
+        // still lands exactly where Litematica meant it to.
         return candidates.filter {
             BlockPlaceContext(player, hand, stack, it).clickedPos == targetPos
         }

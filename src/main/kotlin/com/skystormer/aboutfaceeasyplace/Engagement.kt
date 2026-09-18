@@ -35,18 +35,23 @@ object Engagement {
     }
 
     /**
-     * Says once, when it becomes relevant, that a hand-picked protocol is being left to it.
+     * Says once, when it becomes relevant, which protocol is being left to carry orientation.
+     *
+     * The same line covers both reasons a negotiated protocol can be in force, because from here
+     * they are indistinguishable and the advice is the same either way: Litematica detected Carpet
+     * or Servux and chose it, in which case the note is accurate and nothing is wrong, or it was
+     * pinned by hand on a server that supports neither, in which case it is the explanation for
+     * every ghost block about to appear.
      *
      * Only reached on a server, and only while Easy Place is actually placing blocks, so a player
-     * who has never turned Easy Place on never hears about any of this. On a Carpet or Servux
-     * server the note is accurate and harmless; on a vanilla server where the protocol has been
-     * pinned by hand it is the explanation for every ghost block they are about to see.
+     * who has never turned Easy Place on never hears about any of this.
      */
     fun adviseIfProtocolNegotiated() {
         if (advised) return
-        if (Litematica.effectiveProtocol() !in NEGOTIATED) return
+        val protocol = Litematica.effectiveProtocol() ?: return
+        if (protocol !in NEGOTIATED) return
         advised = true
-        Messages.protocolNegotiated()
+        Messages.protocolNegotiated(protocol)
     }
 
     /** Forgets what was learned about a server, for when the next one is a different one. */

@@ -4,5 +4,5 @@
   "text.aboutfaceeasyplace.enabled": "About Face Easy Place: on",
   "text.aboutfaceeasyplace.disabled": "About Face Easy Place: off",
   "text.aboutfaceeasyplace.unsupported": "Cannot place %s facing that way here",
-  "text.aboutfaceeasyplace.protocol_negotiated": "Litematica's easy place protocol is set by hand; set it to Auto if blocks fail to appear"
+  "text.aboutfaceeasyplace.protocol_negotiated": "Litematica is using its %s placement protocol; if blocks fail to appear, set easyPlaceProtocolVersion to Auto"
 }
