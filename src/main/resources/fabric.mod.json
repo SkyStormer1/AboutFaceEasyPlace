@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "id": "aboutfaceeasyplace",
+  "version": "${version}",
+  "name": "About Face Easy Place",
+  "description": "A Litematica plugin that makes Easy Place put stairs, slabs, hoppers and every other directional block down the right way round on vanilla servers.",
+  "authors": [
+    "SkyStormer1"
+  ],
+  "contact": {
+    "homepage": "https://github.com/SkyStormer1/AboutFaceEasyPlace",
+    "sources": "https://github.com/SkyStormer1/AboutFaceEasyPlace",
+    "issues": "https://github.com/SkyStormer1/AboutFaceEasyPlace/issues"
+  },
+  "license": "MIT",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      {
+        "value": "com.skystormer.aboutfaceeasyplace.AboutFaceEasyPlaceClient",
+        "adapter": "kotlin"
+      }
+    ]
+  },
+  "mixins": [
+    "aboutfaceeasyplace.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loader_version}",
+    "fabric-api": "*",
+    "fabric-language-kotlin": ">=${fabric_kotlin_version}",
+    "litematica": ">=${litematica_version}",
+    "minecraft": "${minecraft_version}",
+    "java": ">=${java_version}"
+  }
+}
