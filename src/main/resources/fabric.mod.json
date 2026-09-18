@@ -13,6 +13,7 @@
     "issues": "https://github.com/SkyStormer1/AboutFaceEasyPlace/issues"
   },
   "license": "MIT",
+  "icon": "assets/aboutfaceeasyplace/icon.png",
   "environment": "client",
   "entrypoints": {
     "client": [

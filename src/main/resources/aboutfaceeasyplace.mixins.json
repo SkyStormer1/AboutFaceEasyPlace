@@ -3,7 +3,13 @@
   "package": "com.skystormer.aboutfaceeasyplace.mixin",
   "compatibilityLevel": "JAVA_${java_version}",
   "client": [
-    "MultiPlayerGameModeMixin"
+    "BlockItemAccessor",
+    "ClientCommonPacketListenerImplMixin",
+    "LitematicaEasyPlaceUtilsMixin",
+    "LocalPlayerAccessor",
+    "LocalPlayerViewMixin",
+    "MultiPlayerGameModeMixin",
+    "TrapDoorBlockAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
