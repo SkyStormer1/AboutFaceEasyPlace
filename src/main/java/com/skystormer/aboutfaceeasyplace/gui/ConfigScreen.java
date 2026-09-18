@@ -66,7 +66,7 @@ public class ConfigScreen extends Screen {
         // still costs one write.
         Config.save();
         if (this.minecraft != null) {
-            this.minecraft.setScreen(this.parent);
+            this.minecraft.setScreenAndShow(this.parent);
         }
     }
 }

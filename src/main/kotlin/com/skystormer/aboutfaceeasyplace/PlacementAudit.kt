@@ -40,10 +40,14 @@ object PlacementAudit {
 
     private val pending = ArrayList<Pending>()
 
-    fun expect(aligned: Aligner.Outcome.Aligned) {
+    /**
+     * @param expected what the client predicts is there now, after the placement and any uses that
+     *   followed it — the thing the server is expected to agree with.
+     */
+    fun expect(pos: BlockPos, wanted: BlockState, expected: BlockState) {
         if (!Log.detailed) return
         if (pending.size >= MAX_PENDING) pending.removeAt(0)
-        pending += Pending(aligned.pos, aligned.wanted, aligned.expected, DELAY_TICKS)
+        pending += Pending(pos, wanted, expected, DELAY_TICKS)
     }
 
     fun tick(level: BlockGetter) {
@@ -60,11 +64,8 @@ object PlacementAudit {
     }
 
     private fun report(entry: Pending, actual: BlockState) {
-        val mismatch = Aligner.orientationMismatch(actual, entry.wanted)
-        if (mismatch.isEmpty()) {
-            Log.detail("confirmed: {} at {} settled as the schematic asks", entry.wanted.block.descriptionId, entry.pos)
-            return
-        }
+        val mismatch = Aligner.orientationMismatch(actual, entry.wanted) + Adjustments.mismatch(actual, entry.wanted)
+        if (mismatch.isEmpty()) return
 
         // Worth a warning rather than detail, even though only verbose logging gets here: this is
         // the mod having claimed something and been wrong about it, which is the one thing it is
