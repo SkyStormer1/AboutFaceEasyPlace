@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft
 import net.minecraft.client.multiplayer.ClientPacketListener
 import net.minecraft.client.multiplayer.MultiPlayerGameMode
 import net.minecraft.client.player.LocalPlayer
+import net.minecraft.core.BlockPos
 import net.minecraft.core.Direction
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
 import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket
@@ -74,7 +75,16 @@ object EasyPlaceHook {
 
         greet(initiator)
         Engagement.adviseIfProtocolNegotiated()
-        if (!Engagement.shouldAlign()) return null
+        if (!Engagement.shouldAlign()) {
+            val wanted = wantedAt(player, hand, hit) ?: return null
+            if (Engagement.alignsHangingSigns() && Engagement.isHangingSign(wanted)) {
+                return align(gameMode, player, hand, hit)
+            }
+            // Litematica's own protocol carries the orientation, but not what a block only gets by
+            // being used after it is down. Those are made once the server's answer has arrived.
+            if (Adjustments.hasAdjustable(wanted)) FollowUp.expect(targetOf(player, hand, hit), wanted, hand)
+            return null
+        }
 
         return align(gameMode, player, hand, hit)
     }
@@ -83,13 +93,13 @@ object EasyPlaceHook {
      * A right click that Easy Place handed back to vanilla.
      *
      * Litematica aims Easy Place along the player's line of sight at the schematic. When the
-     * schematic block there is a small one — dust, a rail, a comparator — the line of sight can
+     * schematic block there is a small one â€” dust, a rail, a comparator â€” the line of sight can
      * pass over it and land on the real block underneath, and Litematica then lets the held right
      * click through as an ordinary one. Three things go wrong on a vanilla server as a result, and
      * this catches exactly those, only while Easy Place is on and the player is not sneaking:
      *
      *  - **The block is placed by vanilla instead.** It lands wherever the player happens to be
-     *    looking — or, with Tweakeroo's accurate placement on, facing whichever way Tweakeroo
+     *    looking â€” or, with Tweakeroo's accurate placement on, facing whichever way Tweakeroo
      *    remembered from the first block of the click. So a click that would put the held block
      *    where the schematic wants it is planned here exactly as an Easy Place one would be.
      *  - **A container opens.** A click on a dropper or a chest uses it rather than placing, so
@@ -285,7 +295,7 @@ object EasyPlaceHook {
         if (claiming && !claimSent) RotationHold.send(placement.rotation, player, connection)
         // The client's copy of the player is put where the server's is, so that the block it
         // predicts is the block the server places: the body at the claim, and the head wherever
-        // the server has it — turned with the claim if it was held, and otherwise where it already
+        // the server has it â€” turned with the claim if it was held, and otherwise where it already
         // was, which may itself be a claim made ahead of time.
         player.yRot = placement.rotation.yaw
         player.xRot = placement.rotation.pitch
@@ -350,30 +360,53 @@ object EasyPlaceHook {
         aligned: Aligner.Outcome.Aligned,
         connection: ClientPacketListener,
     ) {
-        val placed = player.level().getBlockState(aligned.pos)
-        val uses = Adjustments.usesNeeded(placed, aligned.wanted)
+        useToMatch(gameMode, player, hand, aligned.pos, aligned.wanted, connection)
+    }
+
+    /** Uses the block at [pos] as many times as it takes to match [wanted], as [adjust] describes. */
+    fun useToMatch(
+        gameMode: MultiPlayerGameMode,
+        player: LocalPlayer,
+        hand: InteractionHand,
+        pos: BlockPos,
+        wanted: BlockState,
+        connection: ClientPacketListener,
+    ) {
+        val uses = Adjustments.usesNeeded(player.level().getBlockState(pos), wanted)
         if (uses == 0) return
 
-        val main = player.mainHandItem
-        if (hand != InteractionHand.MAIN_HAND && !main.isEmpty) {
+        if (hand != InteractionHand.MAIN_HAND && !player.mainHandItem.isEmpty) {
             Log.warn(
                 "{} at {} needs {} use(s) to match the schematic, but it was placed from the off hand " +
                     "with something else in the main hand, so they were not made",
-                aligned.wanted.block.descriptionId, aligned.pos, uses,
+                wanted.block.descriptionId, pos, uses,
             )
             return
         }
 
-
-        sneaking(player, connection, false) {
-            val use = BlockHitResult(Vec3.atCenterOf(aligned.pos), Direction.UP, aligned.pos, false)
-            repeat(uses) { gameMode.useItemOn(player, InteractionHand.MAIN_HAND, use) }
+        val wasPlacing = placing
+        placing = true
+        try {
+            sneaking(player, connection, false) {
+                val use = BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false)
+                repeat(uses) { gameMode.useItemOn(player, InteractionHand.MAIN_HAND, use) }
+            }
+        } finally {
+            placing = wasPlacing
         }
     }
 
+    /** Where [hit] would put a block. */
+    private fun targetOf(player: LocalPlayer, hand: InteractionHand, hit: BlockHitResult): BlockPos =
+        BlockPlaceContext(player, hand, player.getItemInHand(hand), hit).clickedPos
+
+    /** What the schematic wants where [hit] would put a block, or null with no schematic loaded. */
+    private fun wantedAt(player: LocalPlayer, hand: InteractionHand, hit: BlockHitResult): BlockState? =
+        Litematica.schematicWorld()?.getBlockState(targetOf(player, hand, hit))
+
     /**
      * Runs [action] with the server, and the client's copy of the player, believing the player is
-     * crouching or not as [sneak] says — and puts both back afterwards. Costs nothing when that is
+     * crouching or not as [sneak] says â€” and puts both back afterwards. Costs nothing when that is
      * what the server already believes.
      */
     private fun <T> sneaking(player: LocalPlayer, connection: ClientPacketListener, sneak: Boolean, action: () -> T): T {

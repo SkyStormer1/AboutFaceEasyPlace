@@ -112,6 +112,11 @@ a vanilla server from a Carpet or Servux one, and this mod stays out of the way 
 There is nothing to switch on. The mod is active exactly when Easy Place is, and only ever touches
 blocks the schematic asks for.
 
+In **single player**, and on servers running Carpet or Servux, Litematica's own protocol already
+carries orientation, so the mod steps back — except for what that protocol misses. It still sets
+repeaters, comparators, dust dots, doors and the like once they are down, and in single player it
+handles hanging signs itself.
+
 Settings are behind Mod Menu's cog, or in `config/aboutfaceeasyplace.json`:
 
 | Setting | Default | |
