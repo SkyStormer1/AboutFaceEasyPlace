@@ -17,6 +17,7 @@ object Messages {
     private var lastSaid: String? = null
     private var lastSaidAt = 0L
 
+    /** Always shown: this is the answer to a key the player just pressed. */
     fun toggled(enabled: Boolean) =
         say("toggle", Component.translatable(key(if (enabled) "enabled" else "disabled")), force = true)
 
@@ -29,6 +30,7 @@ object Messages {
     private fun key(name: String) = "text.${AboutFaceEasyPlaceClient.MOD_ID}.$name"
 
     private fun say(tag: String, message: Component, force: Boolean = false) {
+        if (!force && !Config.showMessages) return
         val now = System.currentTimeMillis()
         if (!force && tag == lastSaid && now - lastSaidAt < REPEAT_DELAY_MILLIS) return
         lastSaid = tag

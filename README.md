@@ -179,6 +179,7 @@ Drop the jar in `.minecraft/mods` alongside:
 | [Fabric API](https://modrinth.com/mod/fabric-api) | |
 | [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin) | |
 | **[Litematica](https://github.com/sakura-ryoko/litematica)** + **MaLiLib** | **0.28.0+ — required** |
+| [Mod Menu](https://modrinth.com/mod/modmenu) | optional, for the settings screen |
 
 > [!IMPORTANT]
 > Litematica for Minecraft 26.x is the [**sakura-ryoko**](https://github.com/sakura-ryoko/litematica)
@@ -197,12 +198,28 @@ at all.
 
 ## Using it
 
-There is nothing to switch on. Litematica decides when Easy Place runs and what belongs where; this
-steps in for the moment a block is placed, and only where the orientation would otherwise go unsaid.
+There is nothing to switch on, and nothing to remember to switch off.
 
-A keybind to toggle it off and on lives under **Options ▸ Controls ▸ About Face Easy Place**. It
-starts **unbound**, so it cannot collide with any of Litematica's own keys. That is the whole
-configuration surface, by design.
+**It is active exactly when Easy Place is active, and inert otherwise.** Every placement it touches
+is one Litematica itself is making — turn Easy Place off, let go of the activation key, or switch to
+the Rebuild tool, and the mod never does anything. Blocks you place by hand are never touched, even
+with Easy Place switched on.
+
+### Settings
+
+Behind Mod Menu's cog, or at `config/aboutfaceeasyplace.json`:
+
+| Setting | Default | What it does |
+|:--|:--:|:--|
+| **Align Easy Place orientation** | on | The master switch. |
+| **Skip blocks that cannot be aligned** | on | Declines a placement whose orientation no legal click and look can produce, instead of letting it land wrong. Off, the block is placed however it comes out. |
+| **Show action bar messages** | on | The occasional line explaining a decline, or that Litematica's own protocol is in force. |
+
+The master switch is also on a keybind, under **Options ▸ Controls ▸ About Face Easy Place**, so it
+can be taken out of the way mid-build without opening a menu. It starts **unbound**, so it cannot
+collide with any of Litematica's own keys.
+
+Mod Menu is optional. Without it, the keybind and the config file do the same job.
 
 ## Troubleshooting
 
@@ -212,6 +229,7 @@ configuration surface, by design.
 | *"Litematica is using its V2 placement protocol…"* | Litematica detected Carpet or Servux and is handling orientation itself, so this mod stood aside. If blocks are landing fine, ignore it. |
 | *"Cannot place … facing that way here"* | No legal click and look produces that orientation — a hopper facing up, most likely. The block is skipped rather than placed wrongly. |
 | Nothing happens at all | Check the log for `About Face Easy Place: could not find …`, which means this Litematica build is one the mod cannot read, and it has stood down for the session. |
+| Blocks still land wrong | Easy Place has to actually be running: `easyPlaceMode` on, the activation key held, and the tool mode not set to Rebuild. This mod only ever touches placements Litematica is making. |
 
 ## Building
 

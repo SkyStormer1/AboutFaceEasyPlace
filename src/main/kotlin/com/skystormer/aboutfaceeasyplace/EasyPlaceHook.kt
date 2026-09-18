@@ -46,7 +46,7 @@ object EasyPlaceHook {
         hit: BlockHitResult,
     ): InteractionResult? {
         if (placing) return null
-        if (!AboutFaceEasyPlaceClient.enabled) return null
+        if (!Config.enabled) return null
         if (Litematica.unavailable) return null
         if (!Litematica.isPlacing()) return null
 
@@ -77,8 +77,8 @@ object EasyPlaceHook {
                 // Declining is the point rather than a failure. Litematica will come back to this
                 // position once its own cooldown lapses, so a block that becomes placeable later —
                 // when the neighbour it needed is there — is picked up without anything to retry
-                // by hand.
-                InteractionResult.FAIL
+                // by hand. Anyone who would rather have the block wrong than missing can say so.
+                if (Config.skipImpossible) InteractionResult.FAIL else null
             }
             is Aligner.Outcome.Aligned -> place(gameMode, player, hand, outcome.placement)
         }

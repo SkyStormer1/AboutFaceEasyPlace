@@ -17,6 +17,10 @@ base {
 
 repositories {
     mavenCentral()
+    maven("https://maven.terraformersmc.com/releases/") {
+        name = "Terraformers"
+        content { includeGroupAndSubgroups("com.terraformersmc") }
+    }
 }
 
 dependencies {
@@ -26,6 +30,10 @@ dependencies {
     modImplementation("net.fabricmc:fabric-loader:${property("loader_version")}")
     modImplementation("net.fabricmc.fabric-api:fabric-api:${property("fabric_api_version")}")
     modImplementation("net.fabricmc:fabric-language-kotlin:${property("fabric_kotlin_version")}")
+
+    // Only for the settings screen behind Mod Menu's cog. Fabric loads a `modmenu` entrypoint
+    // solely when Mod Menu asks for it, so nothing here is needed at runtime without it.
+    modCompileOnly("com.terraformersmc:modmenu:${property("modmenu_version")}")
 }
 
 // Minecraft 26.2 is built for Java 25, and the mixins here weave into its classes, so the mod has
