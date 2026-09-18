@@ -42,7 +42,7 @@ object PlacementAudit {
 
     /**
      * @param expected what the client predicts is there now, after the placement and any uses that
-     *   followed it — the thing the server is expected to agree with.
+     *   followed it â€” the thing the server is expected to agree with.
      */
     fun expect(pos: BlockPos, wanted: BlockState, expected: BlockState) {
         if (!Log.detailed) return
