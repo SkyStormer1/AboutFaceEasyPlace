@@ -1,131 +1,69 @@
 # About Face Easy Place — working notes
 
-A client-side Fabric mod for Minecraft 26.2. It is a **plugin for Litematica**: when Litematica's
-Easy Place puts a block down on a server that runs neither Carpet nor Servux, this makes it land in
-the orientation the schematic asks for. Stairs, slabs, hoppers, logs, observers, doors, lanterns,
-signs. Nothing is needed server-side.
+Client-side Fabric mod for Minecraft 26.2, a plugin for Litematica. On a server without Carpet or
+Servux it makes Easy Place put blocks down in the orientation (and post-placement state) the
+schematic asks for. `README.md` says what it does for players; this file is for whoever works on it.
 
-Read `README.md` for what it does and why. This file is for whoever works on it next.
+## Status
 
----
+Tested in game against a vanilla 26.2 server with Litematica 0.28.8 (old `WorldUtils` path, the
+default). Confirmed by the placement audit: stairs, logs, pillars, chains, hoppers, furnaces, chests,
+anvils, looms, stonecutters, trapdoors, fence gates, doors, repeaters, comparators, dust, pistons,
+sticky pistons, observers, dispensers, droppers, crafters, barrels, signs, hanging signs, banners,
+skulls, lanterns, end rods, lightning rods, rails. Slabs are untested.
 
-## Status: written, reviewed, never run
+## How it works
 
-**The mod has never been compiled against real Minecraft, and has never been loaded into the game.**
+A vanilla server decides orientation from the player's rotation, the clicked face and point, and
+whether they are sneaking. The mod searches for values of those that make vanilla's own
+`getPlacementState` produce the wanted state, claims them for one placement, and restores the truth.
 
-Everything so far was written in a sandbox with no access to `maven.fabricmc.net`, Modrinth or
-masa's maven, and with JDK 21 where the project needs 25 — so Loom could not resolve, Minecraft
-could not be fetched, and `./gradlew build` was never run once. What *has* been verified:
-
-- Kotlin and Java compile cleanly against hand-written stubs (`verification/stubs/`).
-- The placement search passes 37 checks (`verification/run.sh`).
-- Every Minecraft API name used was checked against real Litematica 26.2 source or against the
-  author's working [About Face](https://github.com/SkyStormer1/AboutFace) mod — not from memory.
-
-So the API surface is *evidenced* but not *proven*. Treat the first real build as a first build.
-
-### Do this first, on a machine that can build
-
-```bash
-./gradlew build          # needs JDK 25+
-cd verification && ./run.sh   # needs kotlinc; no Minecraft required
-```
-
-If the build fails, look in this order:
-
-1. **`src/main/java/.../gui/ConfigScreen.java`** — by far the most likely. Vanilla GUI widgets
-   (`CycleButton.onOffBuilder`, `Button.builder().bounds()`, `StringWidget`) were the only APIs with
-   no 26.2 source to check against; Litematica uses MaLiLib's GUI framework, so it gave no example.
-   **It is contained**: delete `src/main/java/.../gui/` and the `modmenu` entrypoint from
-   `fabric.mod.json` and you have a fully working mod with the keybind and config file intact. Do
-   not let a settings screen block testing the actual fix.
-2. **`MultiPlayerGameModeMixin`** — the `useItemOn` descriptor. Taken from Litematica 26.2's own
-   call site, so it should be right, but a mixin target failure is loud and lands here.
-3. **`gradle.properties`** — `litematica_version=0.28.0` is an estimate of the first 26.x release
-   carrying `EasyPlaceUtils`. If the loader rejects the dependency, match what you actually run.
-   `modmenu_version=20.0.1` was copied from Litematica's own 26.2 build config.
-
-### Then test it in game
-
-Vanilla server, Litematica's `easyPlaceProtocolVersion` on **Auto**, `easyPlaceMode` on, activation
-key held. Turn on **Log every placement** first (Mod Menu, or `verboseLogging` in
-`config/aboutfaceeasyplace.json`) — the log is designed to make a failure diagnosable in one pass.
-
-- **Staircase** — the headline case; exercises rotation claiming.
-- **Hopper** — exercises the clicked-face half of the search, a different code path.
-- **Lantern** — exercises the boolean-orientation path, which was broken until a late review pass.
-
-The audit line is the one to read. Half a second after each placement the mod compares what is
-actually in the world against what it claimed, so `the server settled on X, not the Y that was
-claimed` means the plan was right and the server disagreed — a different bug from a wrong plan.
-
----
-
-## How it works, in one paragraph
-
-A vanilla server decides orientation from the player's rotation and the clicked face. Litematica
-encodes the wanted state into the click position instead, which vanilla has rejected as out of
-bounds since 1.18.2, so on a plain server Litematica falls back to a protocol that says nothing and
-orientation comes out of whatever the player happened to be looking at. This mod searches for a
-rotation and a click that make vanilla's *own* rules produce the wanted state, claims them for the
-length of one placement, and tells the truth again immediately. Candidates are validated by asking
-the block what it would place — the same question the server will answer — and every candidate is
-checked against where the block would actually land, so nothing ever moves.
+- **Body yaw vs head yaw.** Most blocks read the body (`getYRot`), which the server takes straight
+  from a rotation packet. Pistons, observers, dispensers, droppers, crafters and barrels read the
+  head (`getViewYRot` → `yHeadRot`), which the server only copies from the body once per tick in
+  `Player.aiStep`. So the search runs body-only first, then with the head turned. A head answer is
+  delivered by `Anticipation` (claims ahead of time for the block under the crosshair) or, as a
+  fallback, by `RotationHold` (keeps the claim across two ticks, then places).
+- **Trap:** the client's `LocalPlayer.getViewYRot` returns the *body* yaw. Simulations must go
+  through `Placing.headOverride` (`LocalPlayerViewMixin`) or they will lie about head-reading blocks.
+- **Post-placement state** (`Adjustments`): repeater delay, comparator mode, dust dot/cross, note,
+  daylight detector, lever, open doors/trapdoors/gates — set by using the block straight after
+  placing, main hand, not sneaking, while the placement claim is still in force.
+- **Clicks** are only ever ones the server accepts (`Aligner.usable`): within 1 block of the clicked
+  block's centre, in reach, and never on a block that does something when used (`Interaction`).
 
 ## Files
 
 | File | What it is |
 |:--|:--|
-| `Aligner.kt` | The search. The heart of the mod; read this first. |
-| `EasyPlaceHook.kt` | The three packets, the reentrancy guard, the rotation claim. |
-| `Litematica.kt` | The *only* contact with Litematica. Stack gate + two reflective calls. |
-| `Engagement.kt` | Whether the mod has any business in this placement at all. |
-| `PlacementAudit.kt` | Reads back what the server actually did. Verbose logging only. |
-| `Log.kt`, `Messages.kt`, `Config.kt` | Logging, action bar, settings. |
-| `mixin/MultiPlayerGameModeMixin.java` | The single point of contact with Minecraft. |
-| `BlockStates.java` | One operation in Java because Kotlin cannot name `Property<?>`'s type. |
-| `verification/` | Runs the search against stand-in blocks, without Minecraft. |
+| `Aligner.kt` | The search. Read this first. |
+| `EasyPlaceHook.kt` | Placement, claims, post-placement uses, vanilla-click handling. |
+| `RotationHold.kt`, `Anticipation.kt` | Claims that must stand across a server tick. |
+| `Adjustments.kt` | Settings that only exist after placement. |
+| `Interaction.kt` | Which blocks must never be clicked to place against. |
+| `WallMounts.kt` + `LitematicaEasyPlaceUtilsMixin` | Lifts Litematica's support-block rule for blocks that stand on their own. |
+| `Litematica.kt` | Every reflective read of Litematica. |
+| `Engagement.kt` | Whether the mod acts at all (vanilla server, Litematica protocol slabs-only/none). |
+| `PlacementAudit.kt` | With verbose logging, checks what the server really placed. |
+| `Tweakeroo.kt` | One-time warning when Tweakeroo's Accurate Block Placement is on. |
+| `mixin/` | `useItemOn` hook, packet rewrite, head-yaw override, accessors. |
 
-## Litematica facts that cost real research
+## Litematica facts
 
-Do not re-derive these; several were only found by reading the source.
-
-- **The fork matters.** masa's tree stops at 1.21.1. Minecraft 26.x is
-  [sakura-ryoko/litematica](https://github.com/sakura-ryoko/litematica), branch `LTS/26.2`. It uses
-  **Mojang mappings**, same as this mod.
-- **There are two Easy Place implementations.** `EasyPlaceUtils` (new) and `WorldUtils` (old,
-  `@Deprecated`). Which one runs depends on `easyPlacePostRewrite`, **which defaults to `false`** —
-  so the old path is what most people are running. Only the new one raises an `isHandling` flag.
-  Gating on that flag made the mod completely inert on a stock install; that bug shipped and was
-  caught later. The gate is now a stack walk, which catches both.
-- **Litematica injects at HEAD of the same `useItemOn`, also cancellable.** Both mixin orderings
-  were traced and both are correct: the nested placement Litematica makes is the only call either
-  mod's gate accepts. Not luck, but worth knowing before touching the hook.
-- **Not every Litematica placement is Easy Place.** `TaskPasteSchematicPerChunkCommand` places a
-  block at a scratch position to capture a block entity, then removes it. The gate accepts only
-  `fi.dy.masa.litematica.util.` for this reason, and logs once for anything else.
-- **Wall-mounted blocks are deliberately skipped.** A wall torch is placed from a torch item, so
-  `wanted.block !== block` and the mod stays out. Litematica already aims those correctly itself.
-- **`hanging` is orientation.** A lantern is the one common block storing orientation as a boolean.
-  Litematica's own orientation list has it; a direction-and-name rule alone misses it.
-- **`shape` means two things.** A rail's is set by the placement; a stair's by its neighbours. It is
-  only treated as orientation when the block has nothing else — see `PREFERRED_PROPERTIES`.
+- Minecraft 26.x Litematica is [sakura-ryoko/litematica](https://github.com/sakura-ryoko/litematica),
+  branch `LTS/26.2`, Mojang mappings.
+- Two Easy Place paths: `WorldUtils` (old, default because `easyPlacePostRewrite` is false) and
+  `EasyPlaceUtils`. The hook recognises both by stack walk; `Litematica.whileHandling` covers the new
+  one for placements made outside its call.
+- For torches, banners, signs and skulls Litematica moves the click to the support block but keeps the
+  hit position in the target, which vanilla rejects as out of range, and refuses outright when the
+  support is missing. `WallMounts` switches that off for blocks that can survive without support.
+- When Litematica's ray misses a small schematic block it hands the click to vanilla (and to
+  Tweakeroo). `EasyPlaceHook.interceptVanillaClick` catches those.
 
 ## Conventions
 
-- **No compile-time dependency on Litematica.** The three things it is asked take no Minecraft types
-  in their signatures, so reflection is exact and no mapping mismatch is possible. Keep it that way.
-- **`verification/run.sh` must pass before committing.** If a change makes a case fail, the case is
-  probably right. When adding a fix, add a case and confirm it fails without the fix — one already
-  in the suite was verified that way.
-- **Comments explain why, not what.** The existing ones set the bar; match it rather than adding
-  narration.
-- **Never let the mod place a block wrongly.** Where orientation cannot be reached it declines and
-  says so. A missing block shows in Litematica's overlay; a wrong one must be found and broken.
-
-## Repository
-
-`SkyStormer1/AboutFaceEasyPlace`, **private**, default branch `main`. Intended for eventual public
-release — there is a `> [!NOTE]` near the top of `README.md` saying it is untested, which should be
-deleted once it has been round the block, and the repo description must be set by hand (the API
-token used so far could not write repository settings).
+- No compile-time dependency on Litematica: reflection, or mixins targeted by name with `require = 0`.
+- Never place a block wrongly. Where the wanted state cannot be reached, decline and say so.
+- Comments explain why, not what.
+- Test against a real vanilla server; single player is ignored by design.

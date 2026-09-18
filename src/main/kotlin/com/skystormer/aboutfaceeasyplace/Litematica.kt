@@ -4,13 +4,12 @@ import net.minecraft.world.level.BlockGetter
 import java.lang.reflect.Method
 
 /**
- * The whole of this mod's contact with Litematica.
+ * Every question this mod asks Litematica: is it placing a block right now, what does the schematic
+ * say should be there, is its own orientation protocol already being honoured by the server, and is
+ * Easy Place switched on. (The one place it reaches into Litematica instead of asking is
+ * `LitematicaEasyPlaceUtilsMixin`.)
  *
- * Three questions are asked, and nothing else is: is Litematica placing a block right now, what
- * does the schematic say should be there, and is Litematica's own orientation protocol already
- * being honoured by the server.
- *
- * The last two are asked by reflection rather than by compiling against Litematica, and that is a
+ * They are asked by reflection rather than by compiling against Litematica, and that is a
  * deliberate choice rather than a shortcut. Litematica's own classes are not remapped, and the
  * entry points used here take no Minecraft types in their signatures, so a reflective lookup is
  * exact in a way that a compiled call would not be: it cannot be thrown off by the mappings a
@@ -27,6 +26,9 @@ object Litematica {
 
     private const val SCHEMATIC_WORLD_HANDLER = "fi.dy.masa.litematica.world.SchematicWorldHandler"
     private const val PLACEMENT_HANDLER = "fi.dy.masa.litematica.util.PlacementHandler"
+    private const val EASY_PLACE_UTILS = "fi.dy.masa.litematica.util.EasyPlaceUtils"
+    private const val GENERIC_CONFIGS = "fi.dy.masa.litematica.config.Configs\$Generic"
+    private const val DATA_MANAGER = "fi.dy.masa.litematica.data.DataManager"
 
     /** Everything Litematica owns lives under here. */
     private const val LITEMATICA_PACKAGE = "fi.dy.masa.litematica."
@@ -116,6 +118,85 @@ object Litematica {
      * vanilla server from a Carpet or Servux one without doing any detecting of its own.
      */
     fun effectiveProtocol(): String? = (invoke(protocolMethod) as? Enum<*>)?.name
+
+    /**
+     * Whether Easy Place is switched on and not set aside by the Rebuild tool, for the one case
+     * where this mod acts on a click Litematica did not make — see `EasyPlaceHook`.
+     *
+     * Read, like everything else here, by reflection. Unlike everything else, a failure only turns
+     * that one case off: nothing about it is worth standing the whole mod down for.
+     */
+    fun easyPlaceActive(): Boolean {
+        if (easyPlaceSettingBroken) return false
+        val setting = easyPlaceSetting ?: return false
+        return try {
+            if (setting.second.invoke(setting.first) != true) return false
+            val mode = toolModeMethod?.invoke(null) as? Enum<*>
+            mode?.name != "REBUILD"
+        } catch (e: ReflectiveOperationException) {
+            easyPlaceSettingBroken = true
+            false
+        }
+    }
+
+    private var easyPlaceSettingBroken = false
+
+    private val easyPlaceSetting: Pair<Any, Method>? by lazy {
+        try {
+            val value = Class.forName(GENERIC_CONFIGS, false, javaClass.classLoader)
+                .getField("EASY_PLACE_MODE").get(null)
+            value to value.javaClass.getMethod("getBooleanValue")
+        } catch (e: ReflectiveOperationException) {
+            Log.info("could not read Litematica's easyPlaceMode setting ({}); clicks on containers are left to Litematica", e.toString())
+            null
+        } catch (e: LinkageError) {
+            null
+        }
+    }
+
+    private val toolModeMethod: Method? by lazy {
+        try {
+            Class.forName(DATA_MANAGER, false, javaClass.classLoader).getMethod("getToolMode")
+        } catch (e: ReflectiveOperationException) {
+            null
+        } catch (e: LinkageError) {
+            null
+        }
+    }
+
+    private val setHandlingMethod: Method? by lazy {
+        try {
+            Class.forName(EASY_PLACE_UTILS, false, javaClass.classLoader)
+                .getMethod("setHandling", Boolean::class.javaPrimitiveType)
+        } catch (e: ReflectiveOperationException) {
+            null
+        } catch (e: LinkageError) {
+            null
+        }
+    }
+
+    /**
+     * Runs [action] with Litematica's newer Easy Place believing it is already handling a click.
+     *
+     * A held placement is made a few ticks after Litematica asked for it, from outside its call.
+     * With `easyPlacePostRewrite` on, Litematica would otherwise treat that placement as a fresh
+     * right click of its own and try to handle it all over again.
+     */
+    fun <T> whileHandling(action: () -> T): T {
+        val method = setHandlingMethod
+        try {
+            method?.invoke(null, true)
+        } catch (_: ReflectiveOperationException) {
+        }
+        try {
+            return action()
+        } finally {
+            try {
+                method?.invoke(null, false)
+            } catch (_: ReflectiveOperationException) {
+            }
+        }
+    }
 
     private fun lookUp(className: String, methodName: String): Method? {
         if (unavailable) return null
