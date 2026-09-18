@@ -11,10 +11,10 @@ import java.lang.reflect.Method
  * does the schematic say should be there, and is Litematica's own orientation protocol already
  * being honoured by the server.
  *
- * They are asked by reflection rather than by compiling against Litematica, and that is a
+ * The last two are asked by reflection rather than by compiling against Litematica, and that is a
  * deliberate choice rather than a shortcut. Litematica's own classes are not remapped, and the
- * three entry points used here take no Minecraft types in their signatures, so a reflective lookup
- * is exact in a way that a compiled call would not be: it cannot be thrown off by the mappings a
+ * entry points used here take no Minecraft types in their signatures, so a reflective lookup is
+ * exact in a way that a compiled call would not be: it cannot be thrown off by the mappings a
  * particular Litematica build was compiled with, and it does not pin this mod to one Litematica
  * version at build time. `WorldSchematic` is a [net.minecraft.world.level.Level] at runtime, so
  * the schematic world comes back as a plain [BlockGetter] and everything past this file is
@@ -28,28 +28,54 @@ object Litematica {
 
     private val LOGGER = LoggerFactory.getLogger("aboutfaceeasyplace")
 
-    private const val EASY_PLACE_UTILS = "fi.dy.masa.litematica.util.EasyPlaceUtils"
     private const val SCHEMATIC_WORLD_HANDLER = "fi.dy.masa.litematica.world.SchematicWorldHandler"
     private const val PLACEMENT_HANDLER = "fi.dy.masa.litematica.util.PlacementHandler"
+
+    /** Everything Litematica owns lives under here. */
+    private const val LITEMATICA_PACKAGE = "fi.dy.masa.litematica."
+
+    /**
+     * How far down the stack to look for Litematica.
+     *
+     * Litematica's own frame sits two or three below the placement it is making, so this is
+     * generous rather than necessary. Bounding it keeps the cost flat on the deep stacks that a
+     * player's own right click arrives on.
+     */
+    private const val STACK_SEARCH_DEPTH = 32L
+
+    private val STACK_WALKER: StackWalker = StackWalker.getInstance()
 
     /** Set once, when something Litematica was expected to have is not there. */
     var unavailable: Boolean = false
         private set
 
-    private val isHandlingMethod: Method? by lazy { lookUp(EASY_PLACE_UTILS, "isHandling") }
     private val schematicWorldMethod: Method? by lazy { lookUp(SCHEMATIC_WORLD_HANDLER, "getSchematicWorld") }
     private val protocolMethod: Method? by lazy { lookUp(PLACEMENT_HANDLER, "getEffectiveProtocolVersion") }
 
     /**
-     * Whether Litematica is in the middle of an Easy Place action.
+     * Whether the placement being made right now is Litematica's rather than the player's.
      *
      * This is the only thing separating a block Easy Place is putting down from one the player is
-     * placing by hand, and it has to be exact in both directions: a placement wrongly claimed would
-     * turn a player's own block the wrong way, and one wrongly passed over is a schematic block
-     * left crooked. Litematica raises this flag around its own placement call and lowers it
-     * immediately after, so it is exact by construction.
+     * placing by hand, and it has to be exact in both directions: a placement wrongly claimed
+     * would turn a player's own block the wrong way, and one wrongly passed over is a schematic
+     * block left crooked.
+     *
+     * It is answered by looking for Litematica on the call stack, which is a blunter instrument
+     * than asking Litematica directly and is used anyway, because Litematica has **two** Easy
+     * Place implementations and only one of them can be asked. `EasyPlaceUtils` raises a flag
+     * around its placement; the older `WorldUtils` path raises nothing — and that older path is
+     * the one that runs by default, because `easyPlacePostRewrite` defaults to off. A flag-based
+     * test would therefore do nothing at all for most people.
+     *
+     * Looking at the stack has neither problem. Both paths call the placement from a class under
+     * [LITEMATICA_PACKAGE], so both are caught, and so is whatever replaces them. A player's own
+     * right click never is: Litematica's own hook into this method is a mixin, and a mixin's
+     * injected code runs as a method **of the class it was merged into**, so it appears on the
+     * stack as Minecraft rather than as Litematica.
      */
-    fun isPlacing(): Boolean = invoke(isHandlingMethod) as? Boolean ?: false
+    fun isPlacing(): Boolean = STACK_WALKER.walk { frames ->
+        frames.limit(STACK_SEARCH_DEPTH).anyMatch { it.className.startsWith(LITEMATICA_PACKAGE) }
+    }
 
     /** The schematic world, or null when no schematic is loaded. */
     fun schematicWorld(): BlockGetter? = invoke(schematicWorldMethod) as? BlockGetter
