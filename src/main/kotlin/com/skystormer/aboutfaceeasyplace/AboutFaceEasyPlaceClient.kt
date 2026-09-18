@@ -55,12 +55,14 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
             EasyPlaceHook.forget()
             PlacementAudit.forget()
             RotationHold.forget()
+            FollowUp.forget()
             Tweakeroo.forget()
             return
         }
 
         RotationHold.tick()
         Anticipation.tick(client)
+        FollowUp.tick(client)
         PlacementAudit.tick(level)
 
         // Consume every press rather than only the first: a key mapping counts presses, and one

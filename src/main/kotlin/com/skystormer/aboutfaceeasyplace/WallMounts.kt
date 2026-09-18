@@ -28,7 +28,7 @@ object WallMounts {
         if (!Config.enabled || Litematica.unavailable) return
         // On a Carpet or Servux server Litematica's own protocol carries the orientation, and its
         // special case is part of how it does so.
-        if (!Engagement.shouldAlign()) return
+        if (!Engagement.shouldAlign() && !(Engagement.alignsHangingSigns() && Engagement.isHangingSign(wanted))) return
         val level = Minecraft.getInstance().level ?: return
         if (!level.getBlockState(pos).canBeReplaced()) return
         if (!wanted.canSurvive(level, pos)) return
