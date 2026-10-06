@@ -56,6 +56,9 @@ object PlacementAudit {
         val entries = pending.iterator()
         while (entries.hasNext()) {
             val entry = entries.next()
+            // A block still being finished by paced uses is not done yet, and judging it now
+            // would report a note block as wrong while its last few uses are on their way.
+            if (FollowUp.isFinishing(entry.pos)) continue
             entry.ticksLeft--
             if (entry.ticksLeft > 0) continue
             entries.remove()
@@ -69,11 +72,19 @@ object PlacementAudit {
 
         // Worth a warning rather than detail, even though only verbose logging gets here: this is
         // the mod having claimed something and been wrong about it, which is the one thing it is
-        // supposed never to do.
-        Log.warn(
-            "at {} the server settled on {}, not the {} that was claimed and expected. Disagreeing on: {}",
-            entry.pos, actual, entry.expected, mismatch.joinToString(", "),
-        )
+        // supposed never to do. Which way it was wrong decides where to look: the server ignoring
+        // the claim, or the plan itself expecting the wrong thing.
+        if (actual == entry.expected) {
+            Log.warn(
+                "at {} the server placed {} as predicted, but the schematic has {}. Disagreeing on: {}",
+                entry.pos, actual, entry.wanted, mismatch.joinToString(", "),
+            )
+        } else {
+            Log.warn(
+                "at {} the server settled on {}, not the {} that was claimed and expected. Disagreeing on: {}",
+                entry.pos, actual, entry.expected, mismatch.joinToString(", "),
+            )
+        }
     }
 
     /** Drops everything outstanding, for when the world it referred to has gone. */
