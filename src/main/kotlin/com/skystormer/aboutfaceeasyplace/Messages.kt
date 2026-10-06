@@ -33,6 +33,13 @@ object Messages {
             Component.translatable(key(if (skipped) "skipped" else "unaligned"), wanted.block.name),
         )
 
+    /** The wall, ceiling or floor a block mounts on is missing, so it would go on the wrong one. */
+    fun unsupported(wanted: BlockState, skipped: Boolean) =
+        say(
+            "unsupported:${wanted.block.descriptionId}",
+            Component.translatable(key(if (skipped) "skipped_unsupported" else "unaligned_unsupported"), wanted.block.name),
+        )
+
     /** Tweakeroo's Accurate Block Placement is on; see [Tweakeroo]. Said once a session. */
     fun tweakerooFighting() =
         say("tweakeroo", Component.translatable(key("tweakeroo_fighting")), force = true)

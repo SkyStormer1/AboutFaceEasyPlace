@@ -1,16 +1,18 @@
 {
   "key.categories.aboutfaceeasyplace": "About Face Easy Place",
   "key.aboutfaceeasyplace.toggle": "Toggle placement alignment",
-  "text.aboutfaceeasyplace.enabled": "About Face Easy Place: on",
-  "text.aboutfaceeasyplace.disabled": "About Face Easy Place: off",
-  "text.aboutfaceeasyplace.protocol_negotiated": "Litematica is using its %s placement protocol; if blocks fail to appear, set easyPlaceProtocolVersion to Auto",
   "config.aboutfaceeasyplace.title": "About Face Easy Place",
   "config.aboutfaceeasyplace.enabled": "Align Easy Place orientation",
   "config.aboutfaceeasyplace.skip_impossible": "Skip blocks that cannot be aligned",
   "config.aboutfaceeasyplace.show_messages": "Show action bar messages",
+  "config.aboutfaceeasyplace.verbose_logging": "Log every placement",
+  "text.aboutfaceeasyplace.enabled": "About Face Easy Place: on",
+  "text.aboutfaceeasyplace.disabled": "About Face Easy Place: off",
   "text.aboutfaceeasyplace.skipped": "Skipped %s: cannot face that way here",
   "text.aboutfaceeasyplace.unaligned": "Placed %s unaligned: cannot face that way here",
-  "config.aboutfaceeasyplace.verbose_logging": "Log every placement",
+  "text.aboutfaceeasyplace.skipped_unsupported": "Skipped %s: what it attaches to is not placed yet",
+  "text.aboutfaceeasyplace.unaligned_unsupported": "Placed %s on the wrong surface: what it attaches to is not placed yet",
   "text.aboutfaceeasyplace.hinge_blocked": "Skipped %s: the door beside it decides its hinge. Place this one first",
+  "text.aboutfaceeasyplace.protocol_negotiated": "Litematica is using its %s placement protocol; if blocks fail to appear, set easyPlaceProtocolVersion to Auto",
   "text.aboutfaceeasyplace.tweakeroo_fighting": "Tweakeroo's Accurate Block Placement is on: turn it off while Easy Placing, it overrides block facing"
 }

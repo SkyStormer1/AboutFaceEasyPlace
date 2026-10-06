@@ -7,13 +7,17 @@ import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.player.Input
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.StandingAndWallBlockItem
 import net.minecraft.world.item.context.BlockPlaceContext
 import net.minecraft.world.level.BlockGetter
 import net.minecraft.world.level.block.BaseRailBlock
 import net.minecraft.world.level.block.DoorBlock
+import net.minecraft.world.level.block.SlabBlock
 import net.minecraft.world.level.block.state.BlockState
+import net.minecraft.world.level.block.state.properties.BlockStateProperties
 import net.minecraft.world.level.block.state.properties.Property
 import net.minecraft.world.level.block.state.properties.RailShape
+import net.minecraft.world.level.block.state.properties.SlabType
 import net.minecraft.world.phys.BlockHitResult
 import net.minecraft.world.phys.Vec3
 import kotlin.math.abs
@@ -120,7 +124,20 @@ object Aligner {
             val closest: BlockState?,
             /** The only thing out of reach is a door's hinge, which its neighbours decide. */
             val hingeOnly: Boolean,
+            /**
+             * What the block should hang from or rest against is not there: a wall button with no
+             * wall, a hanging lantern with no ceiling. Anything placed now would be on the wrong
+             * surface.
+             */
+            val unsupported: Boolean = false,
         ) : Outcome
+
+        /**
+         * The click would add to a block that is already exactly what the schematic wants: a slab
+         * that would become a double slab, a candle that would become two. Declined outright,
+         * because whatever Litematica had in mind, it was not this.
+         */
+        data class AlreadyThere(val pos: BlockPos, val wanted: BlockState) : Outcome
     }
 
     /**
@@ -210,8 +227,16 @@ object Aligner {
         // skull, a torch item a wall torch.
         if (wanted.isAir || wanted.block.asItem() !== item) return Outcome.LeaveAlone(Skip.WRONG_BLOCK)
 
+        val level = player.level()
+        val existing = level.getBlockState(targetPos)
+        if (alreadyThere(existing, wanted)) return Outcome.AlreadyThere(targetPos, wanted)
+
         val properties = wanted.block.stateDefinition.properties
-        val steerable = properties.filter { steerable(wanted, it) }
+        // The first half of a double slab may be either half: the second click makes it double
+        // whichever it was. Asking for one in particular would be asking for something no single
+        // placement can give, and the whole slab would be declined for it.
+        val firstHalf = wantsDoubleSlab(wanted) && existing.block !== wanted.block
+        val steerable = properties.filter { steerable(wanted, it) && !(firstHalf && it == SlabBlock.TYPE) }
 
         // `shape` is only treated as orientation for a block that has no other orientation to go
         // on. A rail's shape is chosen by the placement and is the only thing worth matching; a
@@ -249,9 +274,8 @@ object Aligner {
         var turnsHead = false
         var baselineState: BlockState? = null
 
-        // Sneaking as the server last heard of it comes first, and the other way second: a
-        // hanging sign only hangs from its chains when placed crouching, and nothing else here
-        // cares, so the second pass is almost never reached.
+        // Sneaking as the server last heard of it comes first: only a hanging sign cares, and it
+        // only hangs from its chains when placed crouching.
         val sneakingNow = player.lastSentInput.shift()
         val sneaks = if (required.isEmpty()) listOf(sneakingNow) else listOf(sneakingNow, !sneakingNow)
 
@@ -266,19 +290,27 @@ object Aligner {
         }
 
         try {
-            search@ for (sneak in sneaks) {
-                // Clicks outer, rotations inner. Litematica chose its click for reasons of its
-                // own — a particular half for a slab, a face for a hopper — and a rotation claim
-                // overrides nothing, so every rotation is tried against Litematica's own click
-                // before any other click is considered.
-                for (hit in hits) {
-                    for (rotation in rotations) {
+            // Clicks outer, rotations inner, crouching innermost. Litematica chose its click for
+            // reasons of its own — a particular half for a slab, a face for a hopper — and a
+            // rotation claim overrides nothing, so every rotation is tried against Litematica's
+            // own click before any other click is considered. Crouching is tried alongside each
+            // rather than after all of them: a hanging sign only hangs from its chains when placed
+            // crouching, and with crouching last the budget ran out before it was ever reached.
+            search@ for (hit in hits) {
+                for (rotation in rotations) {
+                    for (sneak in sneaks) {
                         if (simulations >= SIMULATION_BUDGET) break@search
                         // The claim only reaches the body, so the head stays wherever the server
                         // might have it — and the answer has to hold for every one of those.
                         val placed = simulate(hit, rotation, sneak, heads.first()) ?: continue
                         producedAnything = true
-                        if (heads.size > 1 && heads.drop(1).any { simulate(hit, rotation, sneak, it) != placed }) continue
+                        // The claimed yaw is checked as well as every head the server might have,
+                        // because not every server waits a tick to turn the head: one that turns
+                        // it with the body would read the claim where this assumed it would not,
+                        // and a wall button would go on whichever wall the claim happened to face.
+                        // An answer that comes out the same either way is right on both.
+                        val otherHeads = (heads + rotation.yaw).distinct().drop(1)
+                        if (otherHeads.any { simulate(hit, rotation, sneak, it) != placed }) continue
                         if (placed.block !== wanted.block) continue
 
                         val placement = Placement(hit, rotation, sneak)
@@ -293,20 +325,23 @@ object Aligner {
                         }
                     }
                 }
+            }
 
-                if (required.isEmpty()) continue
-                // Only now is turning the head worth it: it means a claim that has to stand for a
-                // tick, made ahead of time if the block was seen coming, or waited for if not.
-                for (hit in hits) {
+            // Only now is turning the head worth it: it means a claim that has to stand for a
+            // tick, made ahead of time if the block was seen coming, or waited for if not.
+            if (found == null && required.isNotEmpty()) {
+                head@ for (hit in hits) {
                     for (rotation in rotations) {
-                        if (simulations >= SIMULATION_BUDGET) break@search
                         if (heads.all { it == rotation.yaw }) continue
-                        val placed = simulate(hit, rotation, sneak, rotation.yaw) ?: continue
-                        producedAnything = true
-                        if (placed.block === wanted.block && matches(placed, target, required)) {
-                            found = Placement(hit, rotation, sneak) to placed
-                            turnsHead = true
-                            break@search
+                        for (sneak in sneaks) {
+                            if (simulations >= SIMULATION_BUDGET) break@head
+                            val placed = simulate(hit, rotation, sneak, rotation.yaw) ?: continue
+                            producedAnything = true
+                            if (placed.block === wanted.block && matches(placed, target, required)) {
+                                found = Placement(hit, rotation, sneak) to placed
+                                turnsHead = true
+                                break@head
+                            }
                         }
                     }
                 }
@@ -325,6 +360,18 @@ object Aligner {
             return Outcome.LeaveAlone(Skip.NOTHING_PLACEABLE)
         }
 
+        if (found == null) {
+            // Two misses are never settled for, because what would go down is a wrong block rather
+            // than a near one. The wall, ceiling or floor the block mounts on is missing, so it
+            // would land on some other surface; it waits until that is there. Or the click adds to
+            // a block already here — a bottom slab where the schematic has a top one — and what
+            // that makes is decided by what is there.
+            val unsupported = !target.canSurvive(level, targetPos) || nothingBehind(level, targetPos, wanted, item)
+            if (unsupported || existing.block === wanted.block) {
+                return Outcome.Unsolvable(targetPos, wanted, closest(tried, wanted, steerable), hingeOnly = false, unsupported = unsupported)
+            }
+        }
+
         if (found == null && tried.isNotEmpty()) {
             // No candidate got everything. Settle, in order of how much is being given up — and
             // work out what was ever really on offer rather than assuming, because a property no
@@ -332,7 +379,13 @@ object Aligner {
             // block whose orientation is fixed, or decided by a neighbour, from being declared
             // impossible: a chest half only a neighbouring chest can settle, a bed's head, the
             // upper half of a door.
-            val reachableSteerable = reachable(steerable, tried)
+            //
+            // A search the budget cut short never saw everything on offer, so it cannot say what
+            // was out of reach: a chained hanging sign looked unreachable while crouching had not
+            // been tried yet, and the plain sign went down in its place. Then nothing is given up.
+            val exhausted = simulations >= SIMULATION_BUDGET
+            val reachableSteerable = if (exhausted) steerable else reachable(steerable, tried)
+            if (exhausted) Log.detail("the search for {} at {} ran out of budget; settling for nothing less", wanted, targetPos)
             val tiers = listOf(
                 steerable,
                 reachableSteerable + reachable(preferred, tried),
@@ -355,7 +408,6 @@ object Aligner {
             }
         }
 
-
         val chosen = found ?: run {
             val closest = closest(tried, wanted, steerable)
             // Anything that got everything but the hinge settles it: the rest was reachable, and
@@ -376,9 +428,36 @@ object Aligner {
         )
     }
 
+    /**
+     * Whether placing [wanted] here would only add to a block that already matches it.
+     *
+     * Only blocks that can be added to get this far — slabs, candles, sea pickles — because nothing
+     * else lets a placement land in a space that is already taken. Whether it is waterlogged is
+     * left out: the schematic's water is not the world's business here.
+     */
+    fun alreadyThere(existing: BlockState, wanted: BlockState): Boolean =
+        !existing.isAir && !existing.canBeReplaced() && existing.block === wanted.block &&
+            wanted.block.stateDefinition.properties.all { it == BlockStateProperties.WATERLOGGED || BlockStates.agree(existing, wanted, it) }
+
+    private fun wantsDoubleSlab(wanted: BlockState): Boolean =
+        wanted.block is SlabBlock && wanted.getValue(SlabBlock.TYPE) == SlabType.DOUBLE
+
     /** [input] with only the sneak key changed. */
     fun withShift(input: Input, shift: Boolean) =
         Input(input.forward(), input.backward(), input.left(), input.right(), input.jump(), shift, input.sprint())
+
+    /**
+     * Whether [wanted] is the wall form of a standing-or-wall block with nothing behind it.
+     *
+     * A wall skull stays up once its wall is gone, so [BlockState.canSurvive] passes it, but vanilla
+     * only places one against a block that is there.
+     */
+    private fun nothingBehind(level: BlockGetter, pos: BlockPos, wanted: BlockState, item: BlockItem): Boolean {
+        if (item !is StandingAndWallBlockItem || wanted.block === item.block) return false
+        if (!wanted.hasProperty(BlockStateProperties.HORIZONTAL_FACING)) return false
+        val behind = pos.relative(wanted.getValue(BlockStateProperties.HORIZONTAL_FACING).opposite)
+        return level.getBlockState(behind).canBeReplaced()
+    }
 
     /**
      * What the search should aim at, where that differs from what the schematic holds.
@@ -423,8 +502,10 @@ object Aligner {
         if (actual.block !== wanted.block) {
             return listOf("block=${actual.block.descriptionId} (wanted ${wanted.block.descriptionId})")
         }
+        // One slab where the schematic has two is the first half of the job, not a wrong block.
+        val halfDone = wantsDoubleSlab(wanted) && actual.getValue(SlabBlock.TYPE) != SlabType.DOUBLE
         return wanted.block.stateDefinition.properties
-            .filter { steerable(wanted, it) && !BlockStates.agree(actual, wanted, it) }
+            .filter { steerable(wanted, it) && !(halfDone && it == SlabBlock.TYPE) && !BlockStates.agree(actual, wanted, it) }
             .map { "${it.name}=${BlockStates.read(actual, it)} (wanted ${BlockStates.read(wanted, it)})" }
     }
 

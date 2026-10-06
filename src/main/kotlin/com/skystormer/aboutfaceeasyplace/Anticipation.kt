@@ -82,7 +82,7 @@ object Anticipation {
      * block in the way ends the search, as it ends Easy Place's.
      *
      * Getting this slightly wrong costs only speed: a block that was not anticipated falls back to
-     * a claim held for a couple of ticks at the moment it is placed.
+     * a claim held until the server has ticked, at the moment it is placed.
      */
     private fun targetUnderCrosshair(player: LocalPlayer, schematic: BlockGetter): BlockHitResult? {
         val level = player.level()

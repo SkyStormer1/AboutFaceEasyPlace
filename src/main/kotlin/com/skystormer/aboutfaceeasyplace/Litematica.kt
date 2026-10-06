@@ -5,9 +5,9 @@ import java.lang.reflect.Method
 
 /**
  * Every question this mod asks Litematica: is it placing a block right now, what does the schematic
- * say should be there, is its own orientation protocol already being honoured by the server, and is
- * Easy Place switched on. (The one place it reaches into Litematica instead of asking is
- * `LitematicaEasyPlaceUtilsMixin`.)
+ * say should be there, is its own orientation protocol already being honoured by the server, is
+ * Easy Place switched on, and is its key held. (The one place it reaches into Litematica instead of
+ * asking is `LitematicaEasyPlaceUtilsMixin`.)
  *
  * They are asked by reflection rather than by compiling against Litematica, and that is a
  * deliberate choice rather than a shortcut. Litematica's own classes are not remapped, and the
@@ -29,6 +29,7 @@ object Litematica {
     private const val EASY_PLACE_UTILS = "fi.dy.masa.litematica.util.EasyPlaceUtils"
     private const val GENERIC_CONFIGS = "fi.dy.masa.litematica.config.Configs\$Generic"
     private const val DATA_MANAGER = "fi.dy.masa.litematica.data.DataManager"
+    private const val HOTKEYS = "fi.dy.masa.litematica.config.Hotkeys"
 
     /** Everything Litematica owns lives under here. */
     private const val LITEMATICA_PACKAGE = "fi.dy.masa.litematica."
@@ -120,11 +121,12 @@ object Litematica {
     fun effectiveProtocol(): String? = (invoke(protocolMethod) as? Enum<*>)?.name
 
     /**
-     * Whether Easy Place is switched on and not set aside by the Rebuild tool, for the one case
-     * where this mod acts on a click Litematica did not make — see `EasyPlaceHook`.
+     * Whether Easy Place is switched on and not set aside by the Rebuild tool: for the work this mod
+     * does outside Litematica's own placements — claiming ahead of time, adding to candles, and
+     * catching the clicks Easy Place hands back to vanilla.
      *
      * Read, like everything else here, by reflection. Unlike everything else, a failure only turns
-     * that one case off: nothing about it is worth standing the whole mod down for.
+     * that work off: none of it is worth standing the whole mod down for.
      */
     fun easyPlaceActive(): Boolean {
         if (easyPlaceSettingBroken) return false
@@ -139,6 +141,34 @@ object Litematica {
         }
     }
 
+    /**
+     * Whether Litematica's Easy Place key is held, or null if that cannot be read.
+     *
+     * Asked of Litematica rather than of Minecraft's use key, because Litematica takes the press
+     * for itself, and the use key may never read as held while Easy Place is working.
+     */
+    fun easyPlaceKeyHeld(): Boolean? {
+        val (keybind, held) = easyPlaceKey ?: return null
+        return try {
+            held.invoke(keybind) == true
+        } catch (e: ReflectiveOperationException) {
+            null
+        }
+    }
+
+    private val easyPlaceKey: Pair<Any, Method>? by lazy {
+        try {
+            val hotkey = Class.forName(HOTKEYS, false, javaClass.classLoader).getField("EASY_PLACE_ACTIVATION").get(null)
+            val keybind = hotkey.javaClass.getMethod("getKeybind").invoke(hotkey)
+            keybind to keybind.javaClass.getMethod("isKeybindHeld").also { it.isAccessible = true }
+        } catch (e: ReflectiveOperationException) {
+            Log.info("could not read Litematica's Easy Place key ({}); going by the use key instead", e.toString())
+            null
+        } catch (e: LinkageError) {
+            null
+        }
+    }
+
     private var easyPlaceSettingBroken = false
 
     private val easyPlaceSetting: Pair<Any, Method>? by lazy {
@@ -147,7 +177,10 @@ object Litematica {
                 .getField("EASY_PLACE_MODE").get(null)
             value to value.javaClass.getMethod("getBooleanValue")
         } catch (e: ReflectiveOperationException) {
-            Log.info("could not read Litematica's easyPlaceMode setting ({}); clicks on containers are left to Litematica", e.toString())
+            Log.info(
+                "could not read Litematica's easyPlaceMode setting ({}); only Litematica's own placements will be aligned",
+                e.toString(),
+            )
             null
         } catch (e: LinkageError) {
             null
