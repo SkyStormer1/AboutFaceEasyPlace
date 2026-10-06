@@ -12,7 +12,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * The mod's single point of contact with Minecraft.
+ * Where placements are steered.
  *
  * This is where Litematica's Easy Place makes its placement, and hooking it rather than the packet
  * that comes out of it is what lets the claimed rotation be in place for the client's own
@@ -20,8 +20,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * decided what it thinks it just placed.
  *
  * Every other use of every other block reaches this too, which is why the hook's first act is to
- * ask Litematica whether it is the one placing. Nothing here fires for a block the player places
- * by hand.
+ * ask Litematica whether it is the one placing. The only other clicks it touches are the ones Easy
+ * Place hands back to vanilla while it is on; a block placed by hand with Easy Place off is never
+ * touched.
  */
 @Mixin(MultiPlayerGameMode.class)
 public abstract class MultiPlayerGameModeMixin {

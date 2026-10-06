@@ -8,13 +8,13 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * The three things worth deciding, kept in `config/aboutfaceeasyplace.json`.
+ * The four things worth deciding, kept in `config/aboutfaceeasyplace.json`.
  *
  * Everything else about this mod is meant to need no decision: Litematica says when to act and the
  * server says whether it is needed. What is left is whether the mod runs at all, what to do with a
- * block whose orientation cannot be reached, and whether to say so.
+ * block whose orientation cannot be reached, whether to say so, and how much to log.
  *
- * Read and written by hand rather than through a config library, because three booleans do not
+ * Read and written by hand rather than through a config library, because four booleans do not
  * justify a dependency, and a config file that a missing library could stop the mod loading over
  * is a worse trade than a few lines of Gson.
  */

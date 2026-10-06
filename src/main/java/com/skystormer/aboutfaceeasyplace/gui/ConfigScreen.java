@@ -11,7 +11,7 @@ import net.minecraft.network.chat.Component;
 import java.util.function.Consumer;
 
 /**
- * Three switches and a Done button.
+ * Four switches and a Done button.
  *
  * Built from plain vanilla widgets rather than a config library, so that the mod carries no
  * dependency for the sake of a screen most people will open once. Mod Menu is what usually opens
