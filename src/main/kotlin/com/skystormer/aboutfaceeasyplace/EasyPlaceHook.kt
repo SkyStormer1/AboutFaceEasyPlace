@@ -92,7 +92,7 @@ object EasyPlaceHook {
      * Litematica aims Easy Place along the player's line of sight at the schematic. When the
      * schematic block there is a small one — dust, a rail, a comparator — the line of sight can
      * pass over it and land on the real block underneath, and Litematica then lets the held right
-     * click through as an ordinary one. Three things go wrong on a vanilla server as a result, and
+     * click through as an ordinary one. Four things go wrong on a vanilla server as a result, and
      * this catches exactly those, only while Easy Place is on and the player is not sneaking:
      *
      *  - **The block is placed by vanilla instead.** It lands wherever the player happens to be
@@ -106,6 +106,8 @@ object EasyPlaceHook {
      *  - **A finished block is undone.** Holding the key on a door this mod has just opened, or a
      *    repeater it has just set, would close it or cycle it again. A click on a block of the
      *    schematic's that this mod adjusts is swallowed.
+     *  - **A finished block is added to.** A click through the gap above a slab the schematic
+     *    already has makes it a double slab; one on a candle makes two. Swallowed as well.
      */
     private fun interceptVanillaClick(
         gameMode: MultiPlayerGameMode,
@@ -135,13 +137,27 @@ object EasyPlaceHook {
         // Where the block would go. An interactive block would be used rather than placed
         // against, so for one of those it is the space in front of the face that was clicked.
         val targetPos = if (interactive) hit.blockPos.relative(hit.direction) else BlockPlaceContext(player, hand, stack, hit).clickedPos
-        if (!level.getBlockState(targetPos).canBeReplaced()) return null
-        if (schematic.getBlockState(targetPos).block.asItem() !== item) return null
-
         // The same point on the same face, named as a click on the empty space rather than on
         // the container. The search starts from it exactly as it would from one of Litematica's.
         val start = if (interactive) BlockHitResult(hit.location, hit.direction, targetPos, false) else hit
-        return align(gameMode, player, hand, start) ?: place(gameMode, player, hand, start)
+        if (!BlockPlaceContext(player, hand, stack, start).canPlace()) return null
+
+        val wanted = schematic.getBlockState(targetPos)
+        if (Aligner.alreadyThere(level.getBlockState(targetPos), wanted)) {
+            Log.detail("swallowed a click that would have added to the finished {} at {}", wanted, targetPos)
+            return InteractionResult.FAIL
+        }
+        if (wanted.block.asItem() !== item) {
+            // Vanilla places the held block where the schematic has something else, or nothing.
+            // Litematica's placementRestriction setting is what stops that, not this mod.
+            Log.detail("the schematic has {} at {}, not the held block; left to vanilla", wanted, targetPos)
+            return null
+        }
+
+        return align(gameMode, player, hand, start) ?: run {
+            Log.detail("placing the held {} at {} as vanilla would; nothing to align", item, targetPos)
+            placeUnaligned(gameMode, player, hand, start)
+        }
     }
 
     private fun align(
@@ -171,7 +187,16 @@ object EasyPlaceHook {
         }
 
         return when (outcome) {
-            is Aligner.Outcome.LeaveAlone -> null
+            is Aligner.Outcome.LeaveAlone -> {
+                // Plain blocks are most of a build, and would bury everything else in the log.
+                if (outcome.why != Aligner.Skip.NO_ORIENTATION) Log.detail("left to Litematica: {}", outcome.why)
+                null
+            }
+
+            is Aligner.Outcome.AlreadyThere -> {
+                Log.detail("declined: {} at {} is already finished, and this click would add to it", outcome.wanted, outcome.pos)
+                InteractionResult.FAIL
+            }
 
             is Aligner.Outcome.Unsolvable -> {
                 if (isUpperHalf(outcome.wanted)) {
@@ -184,10 +209,18 @@ object EasyPlaceHook {
                         "click and look could get was {}. The placement was {}.{}",
                     outcome.wanted, outcome.pos, outcome.closest ?: "nothing",
                     if (Config.skipImpossible) "skipped" else "left to Litematica",
-                    if (outcome.hingeOnly) " Only the hinge is wrong, and a door's hinge is decided by the " +
-                        "doors beside it: place this one before its neighbour." else "",
+                    when {
+                        outcome.hingeOnly -> " Only the hinge is wrong, and a door's hinge is decided by the " +
+                            "doors beside it: place this one before its neighbour."
+                        outcome.unsupported -> " The block it hangs from or rests against is not there yet."
+                        else -> ""
+                    },
                 )
-                if (outcome.hingeOnly) Messages.hingeBlocked(outcome.wanted) else Messages.unaligned(outcome.wanted, Config.skipImpossible)
+                when {
+                    outcome.hingeOnly -> Messages.hingeBlocked(outcome.wanted)
+                    outcome.unsupported -> Messages.unsupported(outcome.wanted, Config.skipImpossible)
+                    else -> Messages.unaligned(outcome.wanted, Config.skipImpossible)
+                }
                 // Declining is the point rather than a failure. Litematica will come back to this
                 // position once its own cooldown lapses, so a block that becomes placeable later —
                 // when the neighbour it needed is there — is picked up without anything to retry
@@ -201,7 +234,10 @@ object EasyPlaceHook {
                     // Litematica's own placement is already right, and there is nothing to do to
                     // the block afterwards: the one case where this mod does nothing at all.
                     outcome.untouched && uses == 0 && !Adjustments.hasAdjustable(outcome.wanted) &&
-                        !RotationHold.claiming -> null
+                        !RotationHold.claiming -> {
+                        Log.detail("left to Litematica: its own click already makes {} at {}", outcome.expected, outcome.pos)
+                        null
+                    }
 
                     outcome.turnsHead -> hold(player, hand, outcome)
                     else -> placeAligned(gameMode, player, hand, outcome, headTurned = false)
@@ -245,6 +281,10 @@ object EasyPlaceHook {
         val stillHeld = player.getItemInHand(hand).item === aligned.wanted.block.asItem()
         val stillSound = Aligner.usable(player, hand, player.getItemInHand(hand), aligned.placement.hit, aligned.pos)
         if (!(stillWanted && stillEmpty && stillHeld && stillSound)) {
+            Log.detail(
+                "held placement of {} at {} dropped: wanted {}, empty {}, held {}, click sound {}",
+                aligned.wanted, aligned.pos, stillWanted, stillEmpty, stillHeld, stillSound,
+            )
             RotationHold.restore(player, connection)
             return
         }
@@ -307,8 +347,12 @@ object EasyPlaceHook {
                 // Made before the real rotation is sent back, because a fence gate opened by a
                 // player facing the wrong way swings round to face them.
                 adjust(gameMode, player, hand, aligned, connection)
-                PlacementAudit.expect(aligned.pos, aligned.wanted, player.level().getBlockState(aligned.pos))
+            } else {
+                // The click has gone to the server all the same, and the server decides for itself.
+                // Whatever it placed is what the audit below will find.
+                Log.detail("the client did not place {} at {} ({}), though the plan said it would", aligned.expected, aligned.pos, result)
             }
+            PlacementAudit.expect(aligned.pos, aligned.wanted, player.level().getBlockState(aligned.pos))
             return result
         } finally {
             placing = false
@@ -324,10 +368,10 @@ object EasyPlaceHook {
     }
 
     /**
-     * A placement of the vanilla click this mod redirected, where the search had nothing to say:
-     * the block has no orientation, so the redirected click is used as it is.
+     * A placement made exactly as given, without the search: the vanilla click this mod redirected
+     * when the block has no orientation, or [TopUp] adding a candle to a candle.
      */
-    private fun place(
+    fun placeUnaligned(
         gameMode: MultiPlayerGameMode,
         player: LocalPlayer,
         hand: InteractionHand,
@@ -346,9 +390,13 @@ object EasyPlaceHook {
      *
      * The uses are made with the main hand, whatever placed the block, because vanilla only lets
      * a block be used by a click with the main hand; an off-hand click on a repeater would place
-     * another repeater. For the same reason they are never made while the main hand holds
-     * something that is not the block — a click that the item in it might answer itself. And
-     * sneaking is lifted for them, because a sneaking player's click places rather than uses.
+     * another repeater. A block placed from the off hand is therefore only finished when the main
+     * hand is empty: whatever is in it might answer the click itself. And sneaking is lifted for
+     * them, because a sneaking player's click places rather than uses.
+     *
+     * Every block [Adjustments] knows takes a use with the main hand whatever it holds, so a use
+     * never falls through to placing the held item — which matters for the uses [FollowUp] makes
+     * later, by when Litematica may have put something else in the hand.
      */
     private fun adjust(
         gameMode: MultiPlayerGameMode,
@@ -357,10 +405,21 @@ object EasyPlaceHook {
         aligned: Aligner.Outcome.Aligned,
         connection: ClientPacketListener,
     ) {
-        useToMatch(gameMode, player, hand, aligned.pos, aligned.wanted, connection)
+        val needed = Adjustments.usesNeeded(player.level().getBlockState(aligned.pos), aligned.wanted)
+        if (needed == 0) return
+        val sent = useToMatch(gameMode, player, hand, aligned.pos, aligned.wanted, connection, uses = needed) ?: return
+        FollowUp.owe(aligned.pos, aligned.wanted, hand, sent, needed - sent, ServerTick.latest(player))
     }
 
-    /** Uses the block at [pos] as many times as it takes to match [wanted], as [adjust] describes. */
+    /**
+     * Makes [uses] uses of the block at [pos] towards [wanted], as [adjust] describes, or as many of
+     * them as [Clicks] has room for now. Returns how many were sent, or null if they cannot
+     * be made at all.
+     *
+     * The allowance is there because Spigot and Paper servers drop a player's clicks once more than
+     * a few arrive within a few milliseconds of each other, and a note block can need two dozen.
+     * Sent in one burst, the server kept the first handful and silently ignored the rest.
+     */
     fun useToMatch(
         gameMode: MultiPlayerGameMode,
         player: LocalPlayer,
@@ -368,9 +427,9 @@ object EasyPlaceHook {
         pos: BlockPos,
         wanted: BlockState,
         connection: ClientPacketListener,
-    ) {
-        val uses = Adjustments.usesNeeded(player.level().getBlockState(pos), wanted)
-        if (uses == 0) return
+        uses: Int,
+    ): Int? {
+        if (uses == 0) return 0
 
         if (hand != InteractionHand.MAIN_HAND && !player.mainHandItem.isEmpty) {
             Log.warn(
@@ -378,19 +437,26 @@ object EasyPlaceHook {
                     "with something else in the main hand, so they were not made",
                 wanted.block.descriptionId, pos, uses,
             )
-            return
+            return null
         }
+        val count = minOf(uses, Clicks.left)
+        if (count == 0) return 0
 
         val wasPlacing = placing
         placing = true
         try {
             sneaking(player, connection, false) {
-                val use = BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false)
-                repeat(uses) { gameMode.useItemOn(player, InteractionHand.MAIN_HAND, use) }
+                // A side face rather than the top: the main hand may hold something else by the
+                // time a paced use goes out, and a head clicked on top of a note block is placed
+                // there rather than tuning it.
+                val use = BlockHitResult(Vec3.atCenterOf(pos), player.direction.opposite, pos, false)
+                repeat(count) { gameMode.useItemOn(player, InteractionHand.MAIN_HAND, use) }
             }
+            Clicks.used(ServerTick.latest(player))
         } finally {
             placing = wasPlacing
         }
+        return count
     }
 
     /** Where [hit] would put a block. */

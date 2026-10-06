@@ -1,8 +1,11 @@
 package com.skystormer.aboutfaceeasyplace;
 
 import com.skystormer.aboutfaceeasyplace.mixin.BlockItemAccessor;
+import com.skystormer.aboutfaceeasyplace.mixin.ClientLevelAccessor;
 import com.skystormer.aboutfaceeasyplace.mixin.LocalPlayerAccessor;
 import com.skystormer.aboutfaceeasyplace.mixin.TrapDoorBlockAccessor;
+import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -43,6 +46,11 @@ public final class Placing {
     /** The yaw the client last reported to the server. */
     public static float lastSentYaw(LocalPlayer player) {
         return ((LocalPlayerAccessor) player).aboutFaceEasyPlace$getYRotLast();
+    }
+
+    /** The numbering of the client's actions that the server acknowledges; see {@code ServerTick}. */
+    public static BlockStatePredictionHandler predictions(ClientLevel level) {
+        return ((ClientLevelAccessor) level).aboutFaceEasyPlace$predictions();
     }
 
     /** Whether a trapdoor can be opened with a click, which an iron one cannot. */

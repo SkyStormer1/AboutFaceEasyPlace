@@ -4,6 +4,7 @@ import net.minecraft.client.multiplayer.ClientPacketListener
 import net.minecraft.client.player.LocalPlayer
 import net.minecraft.network.protocol.Packet
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
+import net.minecraft.network.protocol.game.ServerboundUseItemPacket
 import net.minecraft.world.InteractionHand
 
 /**
@@ -16,27 +17,32 @@ import net.minecraft.world.InteractionHand
  * already turned it.
  *
  * Two kinds of claim stand here, and every movement report the client sends carries whichever is in
- * force instead of the real rotation. The camera never moves; only what the server is told does.
+ * force instead of the real rotation — as does every use of an item in the air, which carries a
+ * rotation too. The camera never moves; only what the server is told does.
  *
  *  - **Anticipated** — set by [Anticipation] every tick, for the schematic block under the
  *    crosshair, before anything is clicked. By the time Easy Place places it the head has long
  *    since turned, and the placement goes through at once. This is the ordinary case.
  *  - **Held** — the fallback, for a click that arrives before an anticipated claim could stand:
- *    the claim is sent, kept for [HOLD_TICKS], and the placement made when it ends. Nothing else is
- *    placed meanwhile, because the server would place it under the claim.
+ *    the claim is sent and kept until [ServerTick] hears that the server has ticked, and the
+ *    placement is made then. Nothing else is placed meanwhile, because the server would place it
+ *    under the claim.
  */
 object RotationHold {
 
     /**
-     * Client ticks a held claim is kept before its placement is made.
-     *
-     * The claim and the placement must reach the server either side of one of its ticks, which two
-     * client ticks apart they do unless the connection bunches packets together.
+     * The claim and the placement must reach the server either side of one of its ticks, or the
+     * head never turns and an observer faces the player. [ServerTick] says when that tick has
+     * passed, and the placement goes then. These counts are only for when it cannot be asked, or
+     * its answer never comes: two client ticks proved too few to be sure of, so they are generous.
      */
-    private const val HOLD_TICKS = 2
+    private const val HOLD_TICKS = 4
 
     /** Ticks a claim must have stood before the server's head can be relied on to hold it. */
-    private const val SETTLED_TICKS = 2
+    private const val SETTLED_TICKS = 3
+
+    /** The longest a hold waits for the server's answer before placing anyway. */
+    private const val GIVE_UP_TICKS = 10
 
     /** Ticks after a held placement during which the server's head may still hold its claim. */
     private const val AFTERMATH_TICKS = 1
@@ -44,6 +50,8 @@ object RotationHold {
     private class Held(
         val aligned: Aligner.Outcome.Aligned,
         val hand: InteractionHand,
+        /** What [ServerTick] is waiting to hear back, or null if it could not ask. */
+        val question: Int?,
         var ticks: Int = 0,
     )
 
@@ -51,6 +59,9 @@ object RotationHold {
 
     private var anticipated: Aligner.Rotation? = null
     private var anticipatedTicks = 0
+
+    /** What [ServerTick] is waiting to hear back for the anticipated claim, or null. */
+    private var anticipatedQuestion: Int? = null
 
     /** The rotation every outgoing movement report is to carry, or null to leave them alone. */
     @Volatile
@@ -78,7 +89,9 @@ object RotationHold {
      */
     fun serverHeads(player: LocalPlayer): List<Float> {
         val standing = anticipated
-        if (held == null && standing != null && anticipatedTicks >= SETTLED_TICKS) return listOf(standing.yaw)
+        if (held == null && standing != null && (ServerTick.hasTicked(anticipatedQuestion) || anticipatedTicks >= SETTLED_TICKS)) {
+            return listOf(standing.yaw)
+        }
 
         val heads = LinkedHashSet<Float>()
         heads += Placing.lastSentYaw(player)
@@ -106,6 +119,7 @@ object RotationHold {
         anticipatedTicks = 0
         inForce = rotation
         send(rotation ?: Aligner.Rotation(player.yRot, player.xRot), player, connection)
+        anticipatedQuestion = rotation?.let { ServerTick.ask(player, connection, it) }
     }
 
     fun begin(
@@ -117,21 +131,33 @@ object RotationHold {
         val rotation = aligned.placement.rotation
         inForce = rotation
         lastClaimYaw = rotation.yaw
-        held = Held(aligned, hand)
         send(rotation, player, connection)
+        held = Held(aligned, hand, ServerTick.ask(player, connection, rotation))
     }
 
     fun tick() {
         if (aftermath > 0 && --aftermath == 0) lastClaimYaw = null
         val current = held ?: return
         current.ticks++
-        if (current.ticks < HOLD_TICKS) return
+        val ready = when {
+            current.question == null -> current.ticks >= HOLD_TICKS
+            ServerTick.hasTicked(current.question) -> true
+            current.ticks >= GIVE_UP_TICKS -> true.also {
+                Log.detail("no word from the server after {} ticks; placing {} anyway", current.ticks, current.aligned.wanted)
+            }
+            else -> false
+        }
+        if (!ready) return
 
         held = null
-        // Handed back to the anticipated claim, or to nothing, before the placement — so that the
-        // rotation sent after it is the one the server should go back to believing. The placement
-        // is a different packet and is unaffected.
-        inForce = anticipated
+        // The hold turned the server's head away from whatever was anticipated before it, so that
+        // claim is dropped rather than resumed: resumed, it still counted as settled, and the next
+        // barrel went down facing the way the hold had turned the head. Anticipation claims it
+        // afresh next tick, and it settles again from there.
+        anticipated = null
+        anticipatedTicks = 0
+        anticipatedQuestion = null
+        inForce = null
         aftermath = AFTERMATH_TICKS
         EasyPlaceHook.placeHeld(current.aligned, current.hand)
     }
@@ -140,6 +166,11 @@ object RotationHold {
     @JvmStatic
     fun rewrite(packet: Packet<*>): Packet<*> {
         val rotation = inForce ?: return packet
+        // A use of the item in the air carries a rotation too, and the server turns the player to
+        // it: vanilla sends one with the real rotation whenever a held click places nothing.
+        if (packet is ServerboundUseItemPacket) {
+            return ServerboundUseItemPacket(packet.hand, packet.sequence, rotation.yaw, rotation.pitch)
+        }
         if (packet !is ServerboundMovePlayerPacket) return packet
         return when {
             packet.hasPosition() -> ServerboundMovePlayerPacket.PosRot(
@@ -181,6 +212,7 @@ object RotationHold {
         held = null
         anticipated = null
         anticipatedTicks = 0
+        anticipatedQuestion = null
         inForce = null
         aftermath = 0
         lastClaimYaw = null

@@ -60,13 +60,20 @@ camera never moves.
   note block pitch, daylight detector inversion, levers, and open doors, trapdoors and fence gates.
   The mod uses the block the right number of times as soon as it is down.
 - **Hanging signs**, hanging from a ceiling or mounted on a wall, including the chained style.
+- **Candles, sea pickles, turtle eggs, petals, leaf litter and snow layers** are added to, one at a
+  time while you hold Easy Place, until there are as many as the schematic has.
+- **Double slabs** go down as two halves, and a finished slab or candle is never added to by a
+  stray click.
+- **Spigot and Paper servers.** These drop clicks that arrive too close together, so the uses a
+  note block needs go out a few at a time, each batch once the server has answered the last.
 - **No containers opened by accident.** A click that would open a dropper or chest underneath a
   small schematic block places the block instead, and holding the key does not undo a door or
   repeater that has just been set.
 
 Candidates are tried by asking the block itself what it would place — the same question the server
 answers — so anything that cannot be made right is **skipped rather than placed wrongly**, and
-Litematica comes back to it.
+Litematica comes back to it. That includes a button, lantern, sign or torch whose wall, ceiling or
+floor is not built yet: it waits for it rather than going on some other surface.
 
 <details>
 <summary><b>Limits</b> — things a vanilla server does not allow</summary>
@@ -80,6 +87,10 @@ Litematica comes back to it.
 - **A door's hinge next to another door.** The doors beside it decide it. If one is skipped with
   *"the door beside it decides its hinge"*, place that door before its neighbour.
 - **Powered state.** Whether something is powered comes from the circuit, not the placement.
+- **Note blocks are slow on Spigot and Paper.** Those servers throw away clicks that arrive too
+  close together, and a high note takes up to 24 of them. So they go out three at a time, waiting
+  for the server to answer each batch before the next — a note block can take a second or more to
+  reach its pitch, longer with a high ping. Vanilla servers and single player have no such limit.
 
 </details>
 
@@ -123,6 +134,11 @@ Settings are behind Mod Menu's cog, or in `config/aboutfaceeasyplace.json`:
 | **Skip blocks that cannot be aligned** | on | Off places them anyway, facing however they come out. |
 | **Show action bar messages** | on | The occasional note about a skipped block. |
 | **Log every placement** | off | One log line per steered placement, and a warning if the server disagreed with it. Worth turning on before reporting a problem. |
+
+> [!TIP]
+> **Litematica → Generic → `placementRestriction`.** Holding right-click repeats the click, and
+> Litematica lets those repeats place your held block where the schematic has nothing. Turn this on
+> to stop stray end rods, banners and the like turning up off the build.
 
 ## Building
 

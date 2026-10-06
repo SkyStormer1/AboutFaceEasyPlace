@@ -5,6 +5,8 @@
   "client": [
     "BlockItemAccessor",
     "ClientCommonPacketListenerImplMixin",
+    "ClientLevelAccessor",
+    "ClientLevelMixin",
     "LitematicaEasyPlaceUtilsMixin",
     "LocalPlayerAccessor",
     "LocalPlayerViewMixin",
