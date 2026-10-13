@@ -6,7 +6,7 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
 import net.minecraft.resources.Identifier
-import org.lwjgl.glfw.GLFW
+import com.mojang.blaze3d.platform.InputConstants
 
 /**
  * About Face Easy Place — a Litematica plugin that makes Easy Place put blocks down the right way
@@ -37,7 +37,7 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
         toggleKey = KeyMappingHelper.registerKeyMapping(
             KeyMapping(
                 "key.$MOD_ID.toggle",
-                GLFW.GLFW_KEY_UNKNOWN,
+                InputConstants.UNKNOWN.value,
                 KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")),
             )
         )

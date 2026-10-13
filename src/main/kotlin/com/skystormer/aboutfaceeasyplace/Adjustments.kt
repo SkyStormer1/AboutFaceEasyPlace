@@ -7,7 +7,7 @@ import net.minecraft.world.level.block.DoorBlock
 import net.minecraft.world.level.block.FenceGateBlock
 import net.minecraft.world.level.block.LeverBlock
 import net.minecraft.world.level.block.NoteBlock
-import net.minecraft.world.level.block.RedStoneWireBlock
+import net.minecraft.world.level.block.RedstoneWireBlock
 import net.minecraft.world.level.block.RepeaterBlock
 import net.minecraft.world.level.block.TrapDoorBlock
 import net.minecraft.world.level.block.state.BlockState
@@ -47,7 +47,7 @@ object Adjustments {
             is FenceGateBlock -> toggle(placed, wanted, FenceGateBlock.OPEN)
             is DoorBlock -> if (block.type().canOpenByHand()) toggle(placed, wanted, DoorBlock.OPEN) else 0
             is TrapDoorBlock -> if (Placing.opensByHand(block)) toggle(placed, wanted, TrapDoorBlock.OPEN) else 0
-            is RedStoneWireBlock -> dustToggle(placed, wanted)
+            is RedstoneWireBlock -> dustToggle(placed, wanted)
             else -> 0
         }
     }
@@ -75,7 +75,7 @@ object Adjustments {
         is DoorBlock -> if (block.type().canOpenByHand()) listOf(DoorBlock.OPEN) else emptyList()
         is TrapDoorBlock -> if (Placing.opensByHand(block)) listOf(TrapDoorBlock.OPEN) else emptyList()
         // The four sides are what tell a dot from a cross, but only while the dust is on its own.
-        is RedStoneWireBlock -> if (isDot(wanted) || isCross(wanted)) SIDES else emptyList()
+        is RedstoneWireBlock -> if (isDot(wanted) || isCross(wanted)) SIDES else emptyList()
         else -> emptyList()
     }
 
@@ -100,7 +100,7 @@ object Adjustments {
         if ((isCross(placed) && isDot(wanted)) || (isDot(placed) && isCross(wanted))) 1 else 0
 
     private val SIDES: List<Property<RedstoneSide>> = Direction.Plane.HORIZONTAL.map {
-        RedStoneWireBlock.PROPERTY_BY_DIRECTION.getValue(it)
+        RedstoneWireBlock.PROPERTY_BY_DIRECTION.getValue(it)
     }
 
     private fun isDot(state: BlockState) = SIDES.all { state.getValue(it) == RedstoneSide.NONE }
