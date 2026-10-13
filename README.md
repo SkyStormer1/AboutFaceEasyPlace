@@ -8,8 +8,8 @@
 
 **Litematica's Easy Place, with every block facing the right way on a vanilla server.**
 
-[![Minecraft](https://img.shields.io/badge/Minecraft-26.2-62B47A?style=for-the-badge&logo=minecraft&logoColor=white)](https://www.minecraft.net/)
-[![Fabric](https://img.shields.io/badge/Fabric-0.19.3+-DBD0B4?style=for-the-badge&logo=fabric&logoColor=333)](https://fabricmc.net/)
+[![Minecraft](https://img.shields.io/badge/Minecraft-26.3-62B47A?style=for-the-badge&logo=minecraft&logoColor=white)](https://www.minecraft.net/)
+[![Fabric](https://img.shields.io/badge/Fabric-0.19.5+-DBD0B4?style=for-the-badge&logo=fabric&logoColor=333)](https://fabricmc.net/)
 [![Litematica](https://img.shields.io/badge/Requires-Litematica-9B59B6?style=for-the-badge)](https://github.com/sakura-ryoko/litematica)
 [![Client only](https://img.shields.io/badge/Client--side-No%20server%20mod-4A90D9?style=for-the-badge)](#installing)
 [![Licence](https://img.shields.io/badge/Licence-MIT-555?style=for-the-badge)](LICENSE)
@@ -103,10 +103,10 @@ into `.minecraft/mods` alongside:
 
 | | |
 |:--|:--|
-| [Fabric Loader](https://fabricmc.net/use/) | 0.19.3+ |
+| [Fabric Loader](https://fabricmc.net/use/) | 0.19.5+ |
 | [Fabric API](https://modrinth.com/mod/fabric-api) | |
 | [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin) | |
-| **[Litematica](https://github.com/sakura-ryoko/litematica)** + **MaLiLib** | **0.28.0+ — required** |
+| **[Litematica](https://github.com/sakura-ryoko/litematica)** + **MaLiLib** | **0.29.0+ — required** |
 | [Mod Menu](https://modrinth.com/mod/modmenu) | optional, for the settings screen |
 
 In Litematica's settings, leave `easyPlaceProtocolVersion` on **Auto**. That is how Litematica tells
