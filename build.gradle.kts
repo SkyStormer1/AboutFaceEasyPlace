@@ -36,7 +36,7 @@ dependencies {
     modCompileOnly("com.terraformersmc:modmenu:${property("modmenu_version")}")
 }
 
-// Minecraft 26.2 is built for Java 25, and the mixins here weave into its classes, so the mod has
+// Minecraft 26.3 is built for Java 25, and the mixins here weave into its classes, so the mod has
 // to be compiled for the same release rather than an older one.
 val javaVersion = JavaVersion.VERSION_25
 
