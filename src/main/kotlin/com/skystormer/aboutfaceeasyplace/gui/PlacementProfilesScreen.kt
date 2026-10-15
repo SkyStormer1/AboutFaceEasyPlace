@@ -2,15 +2,15 @@ package com.skystormer.aboutfaceeasyplace.gui
 
 import com.skystormer.aboutfaceeasyplace.Substitutions
 import fi.dy.masa.litematica.schematic.placement.SchematicPlacement
+import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.CycleButton
-import net.minecraft.client.gui.components.StringWidget
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 
 /**
- * One placement's substitutes: its switch, and each of your profiles on or off for it alone. Every
- * change is saved and shown straight away.
+ * One placement's substitutes: its switch, each of your profiles on or off for it alone, and the way
+ * to make or change profiles. Every change is saved and shown straight away.
  */
 class PlacementProfilesScreen(private val parent: Screen?, private val placement: SchematicPlacement) :
     FramedScreen(Component.translatable("gui.aboutfaceeasyplace.placement_title", placement.name)) {
@@ -34,10 +34,6 @@ class PlacementProfilesScreen(private val parent: Screen?, private val placement
         )
         y += ROW + GAP * 4
 
-        if (Substitutions.profiles.isEmpty()) {
-            addRenderableWidget(StringWidget(left, y, WIDTH, ROW, Component.translatable("gui.aboutfaceeasyplace.no_profiles"), font))
-            return
-        }
         for (profile in Substitutions.profiles) {
             addRenderableWidget(
                 CycleButton.onOffBuilder(profile.id !in choice.off)
@@ -48,6 +44,10 @@ class PlacementProfilesScreen(private val parent: Screen?, private val placement
             )
             y += ROW + GAP
         }
+        // To make or change profiles without leaving Litematica.
+        addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.edit_profiles")) {
+            minecraft.gui.setScreen(SubstitutionsScreen(this))
+        }.bounds(left, y + GAP * 3, WIDTH, ROW).build())
     }
 
     override fun onClose() {
