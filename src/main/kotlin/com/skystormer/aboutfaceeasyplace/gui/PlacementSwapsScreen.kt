@@ -9,7 +9,7 @@ import net.minecraft.client.gui.screens.Screen
 import net.minecraft.network.chat.Component
 
 /**
- * One placement's swaps: its switch, and each of the shared swaps on or off for it alone, for a
+ * One placement's swaps: its switch, and each of the shared links on or off for it alone, for a
  * build where one of them would be wrong. Every change is saved and shown straight away.
  */
 class PlacementSwapsScreen(private val parent: Screen?, private val placement: SchematicPlacement) :
@@ -34,18 +34,17 @@ class PlacementSwapsScreen(private val parent: Screen?, private val placement: S
         )
         y += ROW + GAP * 4
 
-        if (Substitutions.swaps.isEmpty()) {
+        if (Substitutions.links.isEmpty()) {
             addRenderableWidget(StringWidget(left, y, WIDTH, ROW, Component.translatable("gui.aboutfaceeasyplace.no_swaps"), font))
             return
         }
-        for (swap in Substitutions.swaps) {
+        for (link in Substitutions.links) {
             addRenderableWidget(
-                CycleButton.onOffBuilder(swap.id !in choice.off)
-                    .create(left, y, WIDTH, ROW, SubstitutionsScreen.label(swap)) { _, on ->
-                        if (on) choice.off -= swap.id else choice.off += swap.id
+                CycleButton.onOffBuilder(link.id !in choice.off)
+                    .create(left, y, WIDTH, ROW, SubstitutionsScreen.label(link)) { _, on ->
+                        if (on) choice.off -= link.id else choice.off += link.id
                         Substitutions.changed()
                     }
-                    .also { it.setTooltip(Tooltip.create(SubstitutionsScreen.details(swap))) }
             )
             y += ROW + GAP
         }
