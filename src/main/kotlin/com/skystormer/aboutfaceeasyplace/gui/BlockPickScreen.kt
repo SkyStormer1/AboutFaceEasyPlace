@@ -11,7 +11,6 @@ import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.chat.CommonComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
-import net.minecraft.world.item.Items
 import net.minecraft.world.level.block.Block
 import kotlin.math.roundToInt
 
@@ -237,9 +236,14 @@ class BlockPickScreen(
         const val BAR = 4
         const val PICKED = 0xFF55FF55.toInt()
 
-        /** Every block with an item to place it by, in the game's order. */
+        /**
+         * Every block with an item to place it by, in the game's order, each item once: a wall sign,
+         * torch or banner is the same item as the standing one and is left out (it goes with it).
+         */
         val BLOCKS: List<Block> by lazy {
-            BuiltInRegistries.BLOCK.filter { block -> !block.defaultBlockState().isAir && block.asItem() != Items.AIR }
+            BuiltInRegistries.BLOCK.filter { block ->
+                !block.defaultBlockState().isAir && (block.asItem() as? net.minecraft.world.item.BlockItem)?.block === block
+            }
         }
     }
 }
