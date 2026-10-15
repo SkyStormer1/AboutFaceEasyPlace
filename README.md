@@ -145,16 +145,18 @@ Settings are behind Mod Menu's cog, or in `config/aboutfaceeasyplace.json`:
 For redstone, or a schematic that is only there for its shape, you can let other blocks stand in
 for the schematic's: **Block swaps…** in the settings.
 
-- **Add a swap** — pick the blocks the schematic has, then the blocks that may stand in for any of
-  them, as many as you like on each side (Stone Bricks, Cobblestone → Deepslate Bricks, Tuff). Click
-  a swap to change it. Swaps are shared by every placement. A stand-in keeps the block's shape,
-  facing and type, and only counts where it is the same shape: put Stone Brick Stairs and Deepslate
-  Brick Stairs in the swap too and a stair stands in only for a stair.
+- **Add stand-ins** — pick blocks, then the blocks that may stand in for them. Each link works both
+  ways (Smooth Stone ↔ Cobblestone: either may be built where the schematic has the other), and only
+  the links you make count: Smooth Stone ↔ Cobblestone and Smooth Stone ↔ Deepslate do not make
+  Cobblestone and Deepslate stand-ins for each other; add that link too if you want it. Click a
+  block to change its stand-ins. Links are shared by every placement. A stand-in keeps the block's
+  shape, facing and type, and only counts where it is the same shape, so a stair only stands in for
+  a stair.
 - **Turn swaps on per placement** — every placement loaded is listed with its own **Swaps** switch
   (off until you turn it on), also on a keybind (unbound by default) for Litematica's selected
-  placement. **Except…** leaves some swaps out in that placement only.
+  placement. **Except…** leaves some links out in that placement only.
 
-Where swaps are on, a swap counts as the right block: the schematic verifier calls it correct, the
+Where swaps are on, a stand-in counts as the right block: the schematic verifier calls it correct, the
 overlay shows nothing to do, and Easy Place leaves it alone. Where nothing is placed yet, Easy Place
 puts down the block in your hand if it is the schematic's or a stand-in, then the schematic's block
 if you have it, then the first stand-in you have. Litematica's material list still lists the schematic's
