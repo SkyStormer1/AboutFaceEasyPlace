@@ -152,9 +152,10 @@ for the schematic's: **Block swaps…** in the settings.
   block to change its stand-ins. Links are shared by every placement. A stand-in keeps the block's
   shape, facing and type, and only counts where it is the same shape, so a stair only stands in for
   a stair.
-- **Turn swaps on per placement** — every placement loaded is listed with its own **Swaps** switch
-  (off until you turn it on), also on a keybind (unbound by default) for Litematica's selected
-  placement. **Except…** leaves some links out in that placement only.
+- **Turn swaps on per placement** — in Litematica's own settings for a placement (Schematic
+  Placements → Configure), **Block swaps** at the top right, with **…** for its links. The same
+  switch is on the Block swaps screen for every placement loaded, and on a keybind (unbound by
+  default) for Litematica's selected placement. Off until you turn it on. **Except…** leaves some links out in that placement only.
 
 Where swaps are on, a stand-in counts as the right block: the schematic verifier calls it correct, the
 overlay shows nothing to do, and Easy Place leaves it alone. Where nothing is placed yet, Easy Place
