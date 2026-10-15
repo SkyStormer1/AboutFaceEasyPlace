@@ -27,70 +27,76 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Block substitution: blocks linked to the blocks that may stand in for them, each link both ways
- * (Smooth Stone ↔ Cobblestone: either may be built where the schematic has the other). Links are
- * only what is set: Smooth Stone ↔ Cobblestone and Smooth Stone ↔ Deepslate do not make Cobblestone
- * and Deepslate stand-ins for each other. Kept for every schematic, and switched on placement by
- * placement, each of which can leave out any of the links.
+ * Block substitutes: profiles you make ("All glass", "Stone"), each a list of groups of blocks. In a
+ * group every block is a substitute for every other, so friends of friends count: a block added to
+ * a group that shares a block with another group of the same profile joins the two. Profiles are
+ * kept for every schematic; each placement switches substitutes on or off (off until you turn it
+ * on) and can leave out any of the profiles.
  *
- * Where a placement has it on, a stand-in counts as the right block everywhere Litematica looks:
- * the verifier counts it correct, the overlay shows nothing to do, and Easy Place leaves it alone.
- * Where nothing is there yet, Easy Place puts down whichever of the block and its stand-ins you
- * have, the one in your hand first.
+ * Where a placement has them on, a substitute counts as the right block everywhere Litematica
+ * looks: the verifier counts it correct, the overlay shows nothing to do, and Easy Place leaves it
+ * alone. Where nothing is there yet, Easy Place puts down whichever of the block and its
+ * substitutes you have, the one in your hand first.
  *
- * A stand-in carries the block's shape across: a stair keeps its facing and half, a slab its type,
- * by the properties the two blocks share. It only counts where those agree and it takes up the same
- * space, so in links among bricks and stairs, only a stair stands in for a stair.
+ * A substitute carries the block's shape across: a stair keeps its facing and half, a slab its
+ * type, by the properties the two blocks share. It only counts where those agree and it takes up
+ * the same space, so in a group of bricks and stairs, only a stair is a substitute for a stair.
  *
  * Kept in `config/aboutfaceeasyplace-substitutions.json`. Litematica's chunk builder threads ask
- * [shown] for every block they draw, so what they read is an unchanging snapshot ([areas], [byBlock]),
- * swapped whole on the client thread.
+ * [shown] for every block they draw, so what they read is an unchanging snapshot ([areas]), swapped
+ * whole on the client thread.
  */
 object Substitutions {
 
-    /** A two-way link: either block may stand in for the other. The same whichever way round it is made. */
-    class Link private constructor(val a: Block, val b: Block) {
-        /** What a placement that leaves this link out remembers it by. */
-        val id: String = "${idOf(a)}|${idOf(b)}"
+    /**
+     * A profile: a name you give it, and its groups, none sharing a block. Known to placements by
+     * [id], which stays the same when it is renamed.
+     */
+    class Profile(val id: String, var name: String, val groups: MutableList<Set<Block>> = ArrayList()) {
 
-        fun other(block: Block): Block? = when (block) {
-            a -> b
-            b -> a
-            else -> null
-        }
-
-        override fun equals(other: Any?) = other is Link && other.id == id
-        override fun hashCode() = id.hashCode()
-
-        companion object {
-            fun of(x: Block, y: Block): Link = if (idOf(x) <= idOf(y)) Link(x, y) else Link(y, x)
+        /**
+         * Puts [blocks] in as a group, in place of the group at [index] (or as a new one, at the end):
+         * any other group sharing a block with it joins it. Fewer than two blocks takes the group away.
+         */
+        fun setGroup(index: Int?, blocks: Set<Block>) {
+            var at = index ?: groups.size
+            if (index != null && index in groups.indices) groups.removeAt(index) else at = groups.size
+            if (blocks.size < 2) return
+            val merged = LinkedHashSet(blocks)
+            val iterator = groups.listIterator()
+            var removedBefore = 0
+            while (iterator.hasNext()) {
+                val position = iterator.nextIndex()
+                val group = iterator.next()
+                if (group.any { it in merged }) {
+                    merged += group
+                    iterator.remove()
+                    if (position < at) removedBefore++
+                }
+            }
+            groups.add((at - removedBefore).coerceIn(0, groups.size), merged)
         }
     }
 
-    /** The links, in the order they were made. */
-    val links: MutableSet<Link> = LinkedHashSet()
-
-    /** Every block with a stand-in, each once, by name. */
-    fun linkedBlocks(): List<Block> = links.flatMap { listOf(it.a, it.b) }.distinct().sortedBy { it.name.string }
-
-    /** The blocks that may stand in for [block], in the order they were linked. */
-    fun standInsFor(block: Block): Set<Block> = links.mapNotNullTo(LinkedHashSet()) { it.other(block) }
-
-    /** Makes [standIns] exactly the blocks linked to [block]: links to others are taken away, new ones made. */
-    fun setStandIns(block: Block, standIns: Set<Block>) {
-        links.removeIf { it.other(block) != null && it.other(block) !in standIns }
-        standIns.filter { it !== block }.forEach { links += Link.of(block, it) }
-    }
-
-    /** What a placement has chosen: whether swaps apply in it, and which ones it leaves out. */
+    /** What a placement has chosen: whether substitutes apply in it, and which profiles (by id) it leaves out. */
     data class PlacementChoice(var on: Boolean = false, val off: MutableSet<String> = HashSet())
 
-    /** A placement with swaps on, as a box and the swaps it allows, for the chunk builder threads. */
+    /** A placement with substitutes on, as a box and each block's substitutes there, for the chunk builder threads. */
     private class Area(
         val minX: Int, val minY: Int, val minZ: Int, val maxX: Int, val maxY: Int, val maxZ: Int,
-        val off: Set<String>,
+        val substitutes: Map<Block, Set<Block>>,
     ) {
         fun contains(x: Int, y: Int, z: Int) = x in minX..maxX && y in minY..maxY && z in minZ..maxZ
+    }
+
+    /** The profiles, in the order they were made. */
+    val profiles: MutableList<Profile> = ArrayList()
+
+    /** A new profile with an id no other has. */
+    fun newProfile(name: String): Profile {
+        var n = profiles.size + 1
+        while (profiles.any { it.id == "profile$n" }) n++
+        return Profile("profile$n", name).also { profiles += it }
     }
 
     private val GSON = GsonBuilder().setPrettyPrinting().create()
@@ -104,27 +110,22 @@ object Substitutions {
     @Volatile
     private var areas: List<Area> = emptyList()
 
-    @Volatile
-    private var byBlock: Map<Block, List<Link>> = emptyMap()
-
     private var ticks = 0
     private var broken = false
 
     // ---- What Litematica's hooks ask ----
 
     /**
-     * Whether [client] at x, y, z is an allowed stand-in for [schematic]: linked to it, by a link the
-     * placement there has on, agreeing with the schematic's block on every property they share,
-     * and the same shape (so in a swap of bricks and stairs, only a stair stands in for a stair).
+     * Whether [client] at x, y, z is an allowed substitute for [schematic]: in a group with it, in a
+     * profile the placement there uses, agreeing with the schematic's block on every property they
+     * share, and the same shape (so in a group of bricks and stairs, only a stair counts for a stair).
      */
     @JvmStatic
     fun matches(x: Int, y: Int, z: Int, schematic: BlockState, client: BlockState): Boolean {
         if (schematic === client || schematic.isAir || client.isAir || schematic.block === client.block) return false
-        val links = byBlock[schematic.block] ?: return false
-        if (links.none { it.other(schematic.block) === client.block }) return false
         val area = areas.firstOrNull { it.contains(x, y, z) } ?: return false
-        return links.any { it.other(schematic.block) === client.block && it.id !in area.off } &&
-            shapesAgree(schematic, client) && sameShape(schematic, client)
+        val substitutes = area.substitutes[schematic.block] ?: return false
+        return client.block in substitutes && shapesAgree(schematic, client) && sameShape(schematic, client)
     }
 
     /** What Litematica should take the schematic to hold at [pos], with [client] there: the swap when it [matches]. */
@@ -175,14 +176,13 @@ object Substitutions {
     }
 
     /**
-     * The blocks that may stand in for [state] at [pos], each the same shape once swapped: none
-     * where no placement with swaps on covers it.
+     * The substitutes for [state] at [pos], each the same shape once swapped: none where no
+     * placement with substitutes on covers it.
      */
     private fun allowedAt(pos: BlockPos, state: BlockState): List<Block> {
-        val links = byBlock[state.block] ?: return emptyList()
         val area = areas.firstOrNull { it.contains(pos.x, pos.y, pos.z) } ?: return emptyList()
-        return links.filter { it.id !in area.off }.mapNotNull { it.other(state.block) }
-            .filter { sameShape(state, swapped(state, it)) }
+        val substitutes = area.substitutes[state.block] ?: return emptyList()
+        return substitutes.filter { sameShape(state, swapped(state, it)) }
     }
 
     /** Whether the two take up the same space: a full block for a full block, a stair for a stair facing the same way. */
@@ -238,13 +238,13 @@ object Substitutions {
         return placements().firstOrNull { p -> boxesOf(p).any { it.contains(pos.x, pos.y, pos.z) } }
     }
 
-    /** Switches swaps on or off in [placement], saves, and redraws it. */
+    /** Switches substitutes on or off in [placement], saves, and redraws it. */
     fun setOn(placement: SchematicPlacement, on: Boolean) {
         choiceFor(placement).on = on
         changed()
     }
 
-    /** After the swaps or a placement's choice changed: saved, the snapshot rebuilt, every placement redrawn. */
+    /** After a profile or a placement's choice changed: saved, the snapshot rebuilt, every placement redrawn. */
     fun changed() {
         save()
         refresh()
@@ -260,15 +260,16 @@ object Substitutions {
     private fun refresh() {
         try {
             val out = ArrayList<Area>()
+            // Placements leaving out the same profiles share one table.
+            val tables = HashMap<Set<String>, Map<Block, Set<Block>>>()
             for (placement in placements()) {
                 if (!placement.isEnabled) continue
                 val choice = choices[keyOf(placement)] ?: continue
                 if (!choice.on) continue
-                val off = choice.off.toSet()
-                boxesOf(placement).forEach { out += Area(it.minX, it.minY, it.minZ, it.maxX, it.maxY, it.maxZ, off) }
+                val table = tables.getOrPut(choice.off.toSet()) { substitutesTable(choice.off) }
+                boxesOf(placement).forEach { out += Area(it.minX, it.minY, it.minZ, it.maxX, it.maxY, it.maxZ, table) }
             }
             areas = out
-            byBlock = indexed()
         } catch (e: LinkageError) {
             standDown(e)
         } catch (e: RuntimeException) {
@@ -276,10 +277,20 @@ object Substitutions {
         }
     }
 
+    /** Each block's substitutes across the profiles not in [off]: everything else in its groups. */
+    private fun substitutesTable(off: Set<String>): Map<Block, Set<Block>> {
+        val out = HashMap<Block, MutableSet<Block>>()
+        for (profile in profiles) {
+            if (profile.id in off) continue
+            for (group in profile.groups) for (block in group) out.getOrPut(block) { HashSet() } += group.filter { it !== block }
+        }
+        return out
+    }
+
     private fun standDown(e: Throwable) {
         broken = true
         areas = emptyList()
-        Log.error("block substitution could not read Litematica's placements, so it is off for this session", e)
+        Log.error("block substitutes could not read Litematica's placements, so they are off for this session", e)
     }
 
     private class Bounds(val minX: Int, val minY: Int, val minZ: Int, val maxX: Int, val maxY: Int, val maxZ: Int) {
@@ -305,7 +316,7 @@ object Substitutions {
                 }
             }
         } catch (e: LinkageError) {
-            Log.warn("could not ask Litematica to redraw after a substitution change ({})", e.toString())
+            Log.warn("could not ask Litematica to redraw after a substitutes change ({})", e.toString())
         }
     }
 
@@ -318,38 +329,48 @@ object Substitutions {
 
     fun load() {
         val path = file
-        links.clear()
+        profiles.clear()
         choices.clear()
         try {
-            if (Files.notExists(path)) return
-            val json = JsonParser.parseString(Files.readString(path)).asJsonObject
-            json.getAsJsonArray("links")?.forEach { e ->
-                val pair = e.asJsonArray.mapNotNull { blockOf(it.asString) }
-                if (pair.size == 2 && pair[0] !== pair[1]) links += Link.of(pair[0], pair[1])
+            if (Files.notExists(path)) {
+                starterProfiles()
+                return
             }
-            // The first versions kept one-way swaps ("from" blocks to "to" blocks): each pair becomes a link.
+            val json = JsonParser.parseString(Files.readString(path)).asJsonObject
+            json.getAsJsonArray("profiles")?.forEach { e ->
+                val o = e.asJsonObject
+                val profile = Profile(o.get("id").asString, o.get("name")?.asString ?: "Profile")
+                o.getAsJsonArray("groups")?.forEach { group -> profile.setGroup(null, blocksOf(group)) }
+                profiles += profile
+            }
+            // Earlier test builds kept two-way links, or one-way swaps: they become one profile's groups.
+            val pairs = ArrayList<Set<Block>>()
+            json.getAsJsonArray("links")?.forEach { pairs += blocksOf(it) }
             json.getAsJsonArray("swaps")?.forEach { e ->
                 val o = e.asJsonObject
-                for (from in blocksOf(o.get("from"))) for (to in blocksOf(o.get("to"))) if (from !== to) links += Link.of(from, to)
+                pairs += blocksOf(o.get("from")) + blocksOf(o.get("to"))
             }
+            if (pairs.isNotEmpty()) newProfile("My substitutes").also { profile -> pairs.forEach { profile.setGroup(null, it) } }
             json.getAsJsonObject("placements")?.entrySet()?.forEach { (key, value) ->
                 val o = value.asJsonObject
                 choices[key] = PlacementChoice(
                     o.get("on")?.asBoolean ?: false,
-                    o.getAsJsonArray("off")?.mapTo(HashSet()) { it.asString } ?: HashSet(),
+                    o.getAsJsonArray("off")?.mapTo(HashSet()) { it.asString }?.filterTo(HashSet()) { id -> profiles.any { it.id == id } } ?: HashSet(),
                 )
             }
         } catch (e: Exception) {
-            Log.warn("could not read {}; starting with no swaps. ({})", path, e.toString())
+            Log.warn("could not read {}; starting with no substitutes. ({})", path, e.toString())
         }
-        byBlock = indexed()
     }
 
-    /** The links by each of their blocks, for the lookups. */
-    private fun indexed(): Map<Block, List<Link>> {
-        val out = HashMap<Block, MutableList<Link>>()
-        links.forEach { link -> out.getOrPut(link.a) { ArrayList() } += link; out.getOrPut(link.b) { ArrayList() } += link }
-        return out
+    /** The first time: an "All glass" profile to show how it goes, every glass block one group and every pane another. */
+    private fun starterProfiles() {
+        val glass = BuiltInRegistries.BLOCK.filterTo(LinkedHashSet()) { idOf(it).let { id -> id == "minecraft:glass" || id.endsWith("_stained_glass") || id == "minecraft:tinted_glass" } }
+        val panes = BuiltInRegistries.BLOCK.filterTo(LinkedHashSet()) { idOf(it).let { id -> id == "minecraft:glass_pane" || id.endsWith("_stained_glass_pane") } }
+        newProfile("All glass").apply {
+            setGroup(null, glass)
+            setGroup(null, panes)
+        }
     }
 
     /** A list of block ids (or one, as the first version wrote) as blocks, leaving out any this game does not have. */
@@ -364,11 +385,19 @@ object Substitutions {
         try {
             Files.createDirectories(path.parent)
             val json = JsonObject()
-            json.add("links", JsonArray().also { array ->
-                links.forEach { link -> array.add(JsonArray().apply { add(idOf(link.a)); add(idOf(link.b)) }) }
+            json.add("profiles", JsonArray().also { array ->
+                profiles.forEach { profile ->
+                    array.add(JsonObject().apply {
+                        addProperty("id", profile.id)
+                        addProperty("name", profile.name)
+                        add("groups", JsonArray().also { groups ->
+                            profile.groups.forEach { group -> groups.add(JsonArray().also { a -> group.forEach { a.add(idOf(it)) } }) }
+                        })
+                    })
+                }
             })
             json.add("placements", JsonObject().also { all ->
-                // A placement left as it came (off, nothing left out) is not worth a line.
+                // A placement left as it came (off, no profile left out) is not worth a line.
                 choices.filter { (_, c) -> c.on || c.off.isNotEmpty() }.toSortedMap().forEach { (key, c) ->
                     all.add(key, JsonObject().apply {
                         addProperty("on", c.on)

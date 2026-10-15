@@ -140,28 +140,27 @@ Settings are behind Mod Menu's cog, or in `config/aboutfaceeasyplace.json`:
 > Litematica lets those repeats place your held block where the schematic has nothing. Turn this on
 > to stop stray end rods, banners and the like turning up off the build.
 
-### Block swaps
+### Block substitutes
 
-For redstone, or a schematic that is only there for its shape, you can let other blocks stand in
-for the schematic's: **Block swaps…** in the settings.
+For redstone, or a schematic that is only there for its shape, you can let other blocks be built in
+place of the schematic's: **Block substitutes…** in the settings.
 
-- **Add stand-ins** — pick blocks, then the blocks that may stand in for them. Each link works both
-  ways (Smooth Stone ↔ Cobblestone: either may be built where the schematic has the other), and only
-  the links you make count: Smooth Stone ↔ Cobblestone and Smooth Stone ↔ Deepslate do not make
-  Cobblestone and Deepslate stand-ins for each other; add that link too if you want it. Click a
-  block to change its stand-ins. Links are shared by every placement. A stand-in keeps the block's
-  shape, facing and type, and only counts where it is the same shape, so a stair only stands in for
-  a stair.
-- **Turn swaps on per placement** — in Litematica's own settings for a placement (Schematic
-  Placements → Configure), **Block swaps** at the top right, with **…** for its links. The same
-  switch is on the Block swaps screen for every placement loaded, and on a keybind (unbound by
-  default) for Litematica's selected placement. Off until you turn it on. **Except…** leaves some links out in that placement only.
+- **Profiles** — make your own ("All glass", "Stone"), rename and delete them. An "All glass" one
+  is there to start with.
+- **Groups** — a profile is a list of groups, picked in a block grid: every block in a group is a
+  substitute for every other. Friends of friends count: put a block that is already in another
+  group into a new one and the two join.
+- **Per placement** — in Litematica's own settings for a placement (Schematic Placements →
+  Configure), **Substitutes** at the top right switches them on (off until you do), and **…** picks
+  which profiles that placement uses. The same is on the Block substitutes screen for every
+  placement loaded, and the switch on a keybind (unbound by default).
 
-Where swaps are on, a stand-in counts as the right block: the schematic verifier calls it correct, the
-overlay shows nothing to do, and Easy Place leaves it alone. Where nothing is placed yet, Easy Place
-puts down the block in your hand if it is the schematic's or a stand-in, then the schematic's block
-if you have it, then the first stand-in you have. Litematica's material list still lists the schematic's
-blocks.
+Where substitutes are on, a substitute counts as the right block: the schematic verifier calls it
+correct, the overlay shows nothing to do, and Easy Place leaves it alone. Where nothing is placed
+yet, Easy Place puts down the block in your hand if it is the schematic's or a substitute, then the
+schematic's block if you have it, then the first substitute you have. A substitute keeps the block's
+facing and type, and only counts where it is the same shape: a stair for a stair, a slab for a slab.
+Litematica's material list still lists the schematic's blocks.
 
 ## Building
 

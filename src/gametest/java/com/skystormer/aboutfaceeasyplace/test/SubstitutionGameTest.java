@@ -75,12 +75,15 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                 SchematicPlacement placement = SchematicPlacement.createFor(schematic, origin, "swap test", true, true);
                 DataManager.getSchematicPlacementManager().addSchematicPlacement(placement, false);
 
-                Substitutions.INSTANCE.getLinks().clear();
-                // Links, both ways: each stone block to both deepslate ones (a stair only stands in as a stair),
-                // and cobblestone to deepslate bricks only.
-                Substitutions.INSTANCE.setStandIns(Blocks.STONE_BRICKS, java.util.Set.of(Blocks.DEEPSLATE_BRICKS, Blocks.DEEPSLATE_BRICK_STAIRS));
-                Substitutions.INSTANCE.setStandIns(Blocks.STONE_BRICK_STAIRS, java.util.Set.of(Blocks.DEEPSLATE_BRICKS, Blocks.DEEPSLATE_BRICK_STAIRS));
-                Substitutions.INSTANCE.setStandIns(Blocks.COBBLESTONE, java.util.Set.of(Blocks.DEEPSLATE_BRICKS));
+                // One profile: deepslate bricks and stone bricks in one group, cobblestone and deepslate
+                // bricks in another (so they join: friends of friends), and the two stairs in a third.
+                Substitutions.INSTANCE.getProfiles().clear();
+                var profile = Substitutions.INSTANCE.newProfile("Test");
+                profile.setGroup(null, java.util.Set.of(Blocks.STONE_BRICKS, Blocks.DEEPSLATE_BRICKS));
+                profile.setGroup(null, java.util.Set.of(Blocks.STONE_BRICK_STAIRS, Blocks.DEEPSLATE_BRICK_STAIRS));
+                profile.setGroup(null, java.util.Set.of(Blocks.COBBLESTONE, Blocks.DEEPSLATE_BRICKS));
+                // Glass on its own profile, to check a placement can leave one out.
+                Substitutions.INSTANCE.newProfile("Glass").setGroup(null, java.util.Set.of(Blocks.GLASS, Blocks.TINTED_GLASS));
                 Substitutions.INSTANCE.setOn(placement, true);
             });
             // Built: a swap, a swapped stair the right way, a swapped stair the wrong way, and a wrong block.
@@ -100,23 +103,35 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                 }
                 return sb.toString();
             });
-            LOG.info("matches at x 0..3: {} (want YYnn)", matching);
-            if (!matching.equals("YYnn")) throw new AssertionError("matches gave " + matching);
+            LOG.info("matches at x 0..3: {} (want YYYn)", matching);
+            if (!matching.equals("YYYn")) throw new AssertionError("matches gave " + matching);
 
-            // Links work both ways, only where made, and a full block does not stand in for a stair.
+            // Friends of friends: the cobblestone group joined the stone bricks one, so cobblestone
+            // counts for stone bricks too; the profile has two groups, not three.
             String links = context.computeOnClient(c -> ""
                     + Substitutions.matches(0, Y, 0, Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.STONE_BRICKS.defaultBlockState())
-                    + " " + Substitutions.matches(0, Y, 0, Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState())
+                    + " " + Substitutions.matches(0, Y, 0, Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState())
+                    + " " + Substitutions.matches(0, Y, 0, Blocks.GLASS.defaultBlockState(), Blocks.TINTED_GLASS.defaultBlockState())
+                    + " " + Substitutions.INSTANCE.getProfiles().get(0).getGroups().size());
+            LOG.info("deepslate<-stone, stone<-cobble, glass<-tinted, test groups: {} (want true true true 2)", links);
+            if (!links.equals("true true true 2")) throw new AssertionError("friends of friends: " + links);
+            // The glass profile left out of this placement: glass no longer counts, stone still does.
+            context.runOnClient(c -> {
+                Substitutions.INSTANCE.choiceFor(placement()).getOff().add(Substitutions.INSTANCE.getProfiles().get(1).getId());
+                Substitutions.INSTANCE.changed();
+            });
+            String leftOut = context.computeOnClient(c -> ""
+                    + Substitutions.matches(0, Y, 0, Blocks.GLASS.defaultBlockState(), Blocks.TINTED_GLASS.defaultBlockState())
                     + " " + Substitutions.matches(0, Y, 0, Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState()));
-            LOG.info("deepslate<-stone, deepslate<-cobble, stone<-cobble: {} (want true true false)", links);
-            if (!links.equals("true true false")) throw new AssertionError("links: " + links);
+            LOG.info("with glass left out, glass<-tinted, stone<-cobble: {} (want false true)", leftOut);
+            if (!leftOut.equals("false true")) throw new AssertionError("profile left out: " + leftOut);
 
             boolean blockForStair = context.computeOnClient(c ->
                     Substitutions.matches(1, Y, 0, stair, Blocks.DEEPSLATE_BRICKS.defaultBlockState()));
             LOG.info("full block counted for a stair: {}", blockForStair);
             if (blockForStair) throw new AssertionError("a full block counted for a stair");
 
-            // The verifier: only the cobblestone and the backwards stair are wrong (not swaps); 4 and 5 are missing.
+            // The verifier: only the backwards stair is wrong (cobblestone is a substitute); 4 and 5 are missing.
             context.runOnClient(c -> {
                 SchematicPlacement placement = placement();
                 placement.getSchematicVerifier().startVerification(c.level, SchematicWorldHandler.getSchematicWorld(), placement, () -> {});
@@ -132,7 +147,7 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                 return sb.toString().trim() + " | correct " + v.getCorrectStatesCount();
             });
             LOG.info("verifier: {}", verdict);
-            if (!verdict.startsWith("0=ok 1=ok 2=WRONG_BLOCK 3=WRONG_BLOCK 4=MISSING 5=MISSING")) {
+            if (!verdict.startsWith("0=ok 1=ok 2=ok 3=WRONG_BLOCK 4=MISSING 5=MISSING")) {
                 throw new AssertionError("verifier: " + verdict);
             }
 
@@ -162,10 +177,13 @@ public class SubstitutionGameTest implements FabricClientGameTest {
             context.setScreen(() -> new com.skystormer.aboutfaceeasyplace.gui.SubstitutionsScreen(null));
             context.waitTicks(5);
             context.takeScreenshot("swaps-screen");
+            context.setScreen(() -> new com.skystormer.aboutfaceeasyplace.gui.ProfileScreen(null, Substitutions.INSTANCE.getProfiles().get(0)));
+            context.waitTicks(5);
+            context.takeScreenshot("profile-screen");
             context.setScreen(() -> new com.skystormer.aboutfaceeasyplace.gui.BlockPickScreen(null,
-                    net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.pick_from"),
-                    java.util.Set.of(Blocks.STONE_BRICKS, Blocks.STONE_BRICK_STAIRS),
-                    net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.next"), picked -> kotlin.Unit.INSTANCE));
+                    net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.pick_group"),
+                    java.util.Set.of(Blocks.STONE_BRICKS, Blocks.COBBLESTONE),
+                    net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.save"), picked -> kotlin.Unit.INSTANCE));
             context.waitTicks(5);
             context.takeScreenshot("swaps-picker");
             context.setScreen(() -> new fi.dy.masa.litematica.gui.GuiPlacementConfiguration(placement()));
