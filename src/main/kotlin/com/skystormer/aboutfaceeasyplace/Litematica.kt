@@ -6,8 +6,8 @@ import java.lang.reflect.Method
 /**
  * Every question this mod asks Litematica: is it placing a block right now, what does the schematic
  * say should be there, is its own orientation protocol already being honoured by the server, is
- * Easy Place switched on, and is its key held. (The one place it reaches into Litematica instead of
- * asking is `LitematicaEasyPlaceUtilsMixin`.)
+ * Easy Place switched on, and is its key held. (Where it reaches into Litematica instead of asking:
+ * `LitematicaEasyPlaceUtilsMixin`, and block substitution's hooks, see [Substitutions].)
  *
  * They are asked by reflection rather than by compiling against Litematica, and that is a
  * deliberate choice rather than a shortcut. Litematica's own classes are not remapped, and the
@@ -108,8 +108,11 @@ object Litematica {
         return false
     }
 
-    /** The schematic world, or null when no schematic is loaded. */
-    fun schematicWorld(): BlockGetter? = invoke(schematicWorldMethod) as? BlockGetter
+    /**
+     * The schematic world, or null when no schematic is loaded: as this mod's planning should see
+     * it, with block substitution's swaps in ([Substitutions.planningView]).
+     */
+    fun schematicWorld(): BlockGetter? = (invoke(schematicWorldMethod) as? BlockGetter)?.let(Substitutions::planningView)
 
     /**
      * The name of the Easy Place protocol Litematica has settled on for this server.

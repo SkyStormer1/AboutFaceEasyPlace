@@ -21,6 +21,12 @@ repositories {
         name = "Terraformers"
         content { includeGroupAndSubgroups("com.terraformersmc") }
     }
+    // Litematica and MaLiLib, for compiling the block substitution hooks against: CurseForge's files,
+    // the same ones a CurseForge profile installs.
+    maven("https://cursemaven.com") {
+        name = "CurseMaven"
+        content { includeGroup("curse.maven") }
+    }
 }
 
 dependencies {
@@ -34,6 +40,11 @@ dependencies {
     // Only for the settings screen behind Mod Menu's cog. Fabric loads a `modmenu` entrypoint
     // solely when Mod Menu asks for it, so nothing here is needed at runtime without it.
     modCompileOnly("com.terraformersmc:modmenu:${property("modmenu_version")}")
+    // Compile-time only: the block substitution hooks name Litematica's classes. Litematica is
+    // required at runtime anyway, and every hook is optional, so a Litematica that has moved on
+    // only turns substitution off.
+    modCompileOnly("curse.maven:litematica-${property("litematica_curse_project")}:${property("litematica_curse_file")}")
+    modCompileOnly("curse.maven:malilib-${property("malilib_curse_project")}:${property("malilib_curse_file")}")
 }
 
 // Minecraft 26.3 is built for Java 25, and the mixins here weave into its classes, so the mod has
@@ -76,4 +87,25 @@ tasks.processResources {
 
 tasks.jar {
     from("LICENSE") { rename { "${it}_${base.archivesName.get()}" } }
+}
+
+// In-game test: `gradlew runClientGameTest` builds a small schematic in a test world with
+// Litematica loaded, and checks block substitution in its verifier, its overlay and both of its
+// Easy Place paths.
+fabricApi {
+    configureTests {
+        createSourceSet = true
+        modId = "aboutfaceeasyplace-test"
+        enableGameTests = false
+        eula = true
+    }
+}
+
+dependencies {
+    val litematica = "curse.maven:litematica-${property("litematica_curse_project")}:${property("litematica_curse_file")}"
+    val malilib = "curse.maven:malilib-${property("malilib_curse_project")}:${property("malilib_curse_file")}"
+    "gametestCompileOnly"(litematica)
+    "gametestCompileOnly"(malilib)
+    modLocalRuntime(litematica)
+    modLocalRuntime(malilib)
 }

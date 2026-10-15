@@ -1,5 +1,7 @@
 package com.skystormer.aboutfaceeasyplace.mixin;
 
+import com.llamalad7.mixinextras.sugar.Local;
+import com.skystormer.aboutfaceeasyplace.Substitutions;
 import com.skystormer.aboutfaceeasyplace.WallMounts;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.state.BlockState;
@@ -8,6 +10,7 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
@@ -26,8 +29,12 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * hook then plans like any other. Blocks that need their support, such as a wall torch, are left
  * exactly as Litematica had them.
  *
- * Targeted by name so that there is still no compile-time dependency on Litematica, and optional
- * so that a Litematica without this method leaves the mod working exactly as it did before.
+ * Targeted by name, and optional so that a Litematica without this method leaves the mod working
+ * exactly as it did before.
+ *
+ * Also where Litematica's newer Easy Place ({@code easyPlacePostRewrite} on) is told which block
+ * to place when block substitution is on: see {@link Substitutions#toPlace}, and
+ * {@code LitematicaWorldUtilsMixin} for the older one.
  */
 @Pseudo
 @Mixin(targets = "fi.dy.masa.litematica.util.EasyPlaceUtils")
@@ -45,5 +52,10 @@ public abstract class LitematicaEasyPlaceUtilsMixin {
             CallbackInfoReturnable<Object> cir
     ) {
         WallMounts.release(cir.getReturnValue(), pos, stateSchematic);
+    }
+
+    @ModifyVariable(method = "handleEasyPlace", at = @At(value = "STORE", ordinal = 0), ordinal = 0, require = 0)
+    private static BlockState aboutFaceEasyPlace$placeSwaps(BlockState stateSchematic, @Local(ordinal = 0) BlockPos targetBlockPos) {
+        return Substitutions.toPlace(targetBlockPos, stateSchematic);
     }
 }
