@@ -145,17 +145,19 @@ Settings are behind Mod Menu's cog, or in `config/aboutfaceeasyplace.json`:
 For redstone, or a schematic that is only there for its shape, you can let other blocks stand in
 for the schematic's: **Block swaps…** in the settings.
 
-- **Add a swap** — pick the block the schematic has, then the block that may stand in for it
-  (Stone Bricks → Deepslate Bricks). Swaps are shared by every placement. Stairs, slabs and the like
-  keep their shape, facing and type; add each kind as its own swap.
+- **Add a swap** — pick the blocks the schematic has, then the blocks that may stand in for any of
+  them, as many as you like on each side (Stone Bricks, Cobblestone → Deepslate Bricks, Tuff). Click
+  a swap to change it. Swaps are shared by every placement. A stand-in keeps the block's shape,
+  facing and type, and only counts where it is the same shape: put Stone Brick Stairs and Deepslate
+  Brick Stairs in the swap too and a stair stands in only for a stair.
 - **Turn swaps on per placement** — every placement loaded is listed with its own **Swaps** switch
   (off until you turn it on), also on a keybind (unbound by default) for Litematica's selected
   placement. **Except…** leaves some swaps out in that placement only.
 
 Where swaps are on, a swap counts as the right block: the schematic verifier calls it correct, the
 overlay shows nothing to do, and Easy Place leaves it alone. Where nothing is placed yet, Easy Place
-puts down the block in your hand if it is the schematic's or a swap, then the schematic's block if
-you have it, then the first swap you have. Litematica's material list still lists the schematic's
+puts down the block in your hand if it is the schematic's or a stand-in, then the schematic's block
+if you have it, then the first stand-in you have. Litematica's material list still lists the schematic's
 blocks.
 
 ## Building

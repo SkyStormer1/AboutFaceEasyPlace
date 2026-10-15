@@ -45,6 +45,7 @@ class PlacementSwapsScreen(private val parent: Screen?, private val placement: S
                         if (on) choice.off -= swap.id else choice.off += swap.id
                         Substitutions.changed()
                     }
+                    .also { it.setTooltip(Tooltip.create(SubstitutionsScreen.details(swap))) }
             )
             y += ROW + GAP
         }

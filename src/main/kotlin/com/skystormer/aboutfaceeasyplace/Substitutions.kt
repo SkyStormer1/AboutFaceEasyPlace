@@ -17,16 +17,18 @@ import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.entity.player.Player
 import net.minecraft.world.item.BlockItem
 import net.minecraft.world.level.BlockGetter
+import net.minecraft.world.level.EmptyBlockGetter
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.entity.BlockEntity
 import net.minecraft.world.level.block.state.BlockState
 import net.minecraft.world.level.material.FluidState
+import net.minecraft.world.phys.shapes.Shapes
 import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Block substitution: a list of swaps ("Stone Bricks may be Deepslate Bricks"), kept for every
- * schematic, and switched on placement by placement, each of which can leave out any of the swaps.
+ * Block substitution: a list of swaps, each a group ("Stone Bricks or Cobblestone may be Deepslate
+ * Bricks or Tuff"), kept for every schematic, and switched on placement by placement, each of which can leave out any of the swaps.
  * Where a placement has it on, a swapped block counts as the right one everywhere Litematica looks:
  * the verifier counts it correct, the overlay shows nothing to do, and Easy Place leaves it alone.
  * Where nothing is there yet, Easy Place puts down whichever of the block and its swaps you have,
@@ -41,9 +43,17 @@ import java.nio.file.Path
  */
 object Substitutions {
 
-    /** One swap: [to] may stand in for [from]. */
-    data class Swap(val from: Block, val to: Block) {
-        val id: String get() = "${idOf(from)}>${idOf(to)}"
+    /**
+     * One swap: any block of [to] may stand in for any block of [from]. Known by [id], which stays
+     * the same when the swap is edited, so a placement that leaves it out still does.
+     */
+    class Swap(val id: String, val from: Set<Block>, val to: Set<Block>)
+
+    /** A new swap with an id no other has. */
+    fun newSwap(from: Set<Block>, to: Set<Block>): Swap {
+        var n = swaps.size + 1
+        while (swaps.any { it.id == "swap$n" }) n++
+        return Swap("swap$n", from, to)
     }
 
     /** What a placement has chosen: whether swaps apply in it, and which ones it leaves out. */
@@ -81,15 +91,16 @@ object Substitutions {
 
     /**
      * Whether [client] at x, y, z is an allowed swap for [schematic]: a block of a swap the
-     * placement there has on, agreeing with the schematic's block on every property they share.
+     * placement there has on, agreeing with the schematic's block on every property they share,
+     * and the same shape (so in a swap of bricks and stairs, only a stair stands in for a stair).
      */
     @JvmStatic
     fun matches(x: Int, y: Int, z: Int, schematic: BlockState, client: BlockState): Boolean {
         if (schematic === client || schematic.isAir || client.isAir || schematic.block === client.block) return false
         val swaps = byBlock[schematic.block] ?: return false
-        if (swaps.none { it.to === client.block }) return false
+        if (swaps.none { client.block in it.to }) return false
         val area = areas.firstOrNull { it.contains(x, y, z) } ?: return false
-        return swaps.any { it.to === client.block && it.id !in area.off } && shapesAgree(schematic, client)
+        return swaps.any { client.block in it.to && it.id !in area.off } && shapesAgree(schematic, client) && sameShape(schematic, client)
     }
 
     /** What Litematica should take the schematic to hold at [pos], with [client] there: the swap when it [matches]. */
@@ -109,7 +120,7 @@ object Substitutions {
         val client = minecraft.level?.getBlockState(pos) ?: return schematic
         if (matches(pos.x, pos.y, pos.z, schematic, client)) return client
         val player = minecraft.player ?: return schematic
-        val allowed = allowedAt(pos, schematic.block).ifEmpty { return schematic }
+        val allowed = allowedAt(pos, schematic).ifEmpty { return schematic }
         val held = (player.mainHandItem.item as? BlockItem)?.block
         if (held === schematic.block) return schematic
         if (held != null && held in allowed) return swapped(schematic, held)
@@ -130,7 +141,7 @@ object Substitutions {
             val client = minecraft.level?.getBlockState(pos) ?: return state
             if (matches(pos.x, pos.y, pos.z, state, client)) return client
             val held = (minecraft.player?.mainHandItem?.item as? BlockItem)?.block ?: return state
-            return if (held !== state.block && held in allowedAt(pos, state.block)) swapped(state, held) else state
+            return if (held !== state.block && held in allowedAt(pos, state)) swapped(state, held) else state
         }
 
         override fun getBlockEntity(pos: BlockPos): BlockEntity? = schematic.getBlockEntity(pos)
@@ -139,12 +150,20 @@ object Substitutions {
         override fun getMinY(): Int = schematic.minY
     }
 
-    /** The blocks that may stand in for [block] at [pos]: none where no placement with swaps on covers it. */
-    private fun allowedAt(pos: BlockPos, block: Block): List<Block> {
-        val swaps = byBlock[block] ?: return emptyList()
+    /**
+     * The blocks that may stand in for [state] at [pos], each the same shape once swapped: none
+     * where no placement with swaps on covers it.
+     */
+    private fun allowedAt(pos: BlockPos, state: BlockState): List<Block> {
+        val swaps = byBlock[state.block] ?: return emptyList()
         val area = areas.firstOrNull { it.contains(pos.x, pos.y, pos.z) } ?: return emptyList()
-        return swaps.filter { it.id !in area.off }.map { it.to }
+        return swaps.filter { it.id !in area.off }.flatMap { it.to }.distinct()
+            .filter { it !== state.block && sameShape(state, swapped(state, it)) }
     }
+
+    /** Whether the two take up the same space: a full block for a full block, a stair for a stair facing the same way. */
+    private fun sameShape(a: BlockState, b: BlockState): Boolean =
+        Shapes.equal(a.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO), b.getShape(EmptyBlockGetter.INSTANCE, BlockPos.ZERO))
 
     /** Whether the two blocks agree on every property they both have (a stair's facing, a slab's type). */
     private fun shapesAgree(a: BlockState, b: BlockState): Boolean {
@@ -225,7 +244,7 @@ object Substitutions {
                 boxesOf(placement).forEach { out += Area(it.minX, it.minY, it.minZ, it.maxX, it.maxY, it.maxZ, off) }
             }
             areas = out
-            byBlock = swaps.groupBy { it.from }
+            byBlock = indexed()
         } catch (e: LinkageError) {
             standDown(e)
         } catch (e: RuntimeException) {
@@ -282,9 +301,9 @@ object Substitutions {
             val json = JsonParser.parseString(Files.readString(path)).asJsonObject
             json.getAsJsonArray("swaps")?.forEach { e ->
                 val o = e.asJsonObject
-                val from = blockOf(o.get("from").asString)
-                val to = blockOf(o.get("to").asString)
-                if (from != null && to != null && from !== to) swaps += Swap(from, to)
+                val from = blocksOf(o.get("from"))
+                val to = blocksOf(o.get("to"))
+                if (from.isNotEmpty() && to.isNotEmpty()) swaps += Swap(o.get("id")?.asString ?: newSwap(from, to).id, from, to)
             }
             json.getAsJsonObject("placements")?.entrySet()?.forEach { (key, value) ->
                 val o = value.asJsonObject
@@ -296,7 +315,21 @@ object Substitutions {
         } catch (e: Exception) {
             Log.warn("could not read {}; starting with no swaps. ({})", path, e.toString())
         }
-        byBlock = swaps.groupBy { it.from }
+        byBlock = indexed()
+    }
+
+    /** The swaps by each block they replace, for the lookups. */
+    private fun indexed(): Map<Block, List<Swap>> {
+        val out = HashMap<Block, MutableList<Swap>>()
+        swaps.forEach { swap -> swap.from.forEach { out.getOrPut(it) { ArrayList() } += swap } }
+        return out
+    }
+
+    /** A list of block ids (or one, as the first version wrote) as blocks, leaving out any this game does not have. */
+    private fun blocksOf(element: com.google.gson.JsonElement?): Set<Block> = when {
+        element == null -> emptySet()
+        element.isJsonArray -> element.asJsonArray.mapNotNullTo(LinkedHashSet()) { blockOf(it.asString) }
+        else -> setOfNotNull(blockOf(element.asString))
     }
 
     fun save() {
@@ -305,7 +338,13 @@ object Substitutions {
             Files.createDirectories(path.parent)
             val json = JsonObject()
             json.add("swaps", JsonArray().also { array ->
-                swaps.forEach { swap -> array.add(JsonObject().apply { addProperty("from", idOf(swap.from)); addProperty("to", idOf(swap.to)) }) }
+                swaps.forEach { swap ->
+                    array.add(JsonObject().apply {
+                        addProperty("id", swap.id)
+                        add("from", JsonArray().also { a -> swap.from.forEach { a.add(idOf(it)) } })
+                        add("to", JsonArray().also { a -> swap.to.forEach { a.add(idOf(it)) } })
+                    })
+                }
             })
             json.add("placements", JsonObject().also { all ->
                 // A placement left as it came (off, nothing left out) is not worth a line.

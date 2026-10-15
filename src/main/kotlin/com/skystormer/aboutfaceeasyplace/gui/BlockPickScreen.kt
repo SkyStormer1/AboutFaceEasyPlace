@@ -4,29 +4,40 @@ import com.mojang.blaze3d.platform.InputConstants
 import net.minecraft.client.gui.GuiGraphicsExtractor
 import net.minecraft.client.gui.components.Button
 import net.minecraft.client.gui.components.EditBox
+import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.screens.Screen
 import net.minecraft.client.input.MouseButtonEvent
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.network.chat.CommonComponents
 import net.minecraft.network.chat.Component
 import net.minecraft.world.item.ItemStack
+import net.minecraft.world.item.Items
 import net.minecraft.world.level.block.Block
 import kotlin.math.roundToInt
 
 /**
- * Every block that has an item, as pictures like the creative inventory, with a search by name or
- * id. A click picks one and hands it to [onPick]; Cancel goes back to [parent] with nothing picked.
+ * Every block that has an item, as pictures like the creative inventory, to pick any number of.
+ * Picked ones have a green outline, and those picked already come first; a click switches one. Search by name or id ("stairs", "oak");
+ * All and None act on what the search shows. [done] (labelled [doneLabel]) hands the picked blocks
+ * to [onDone], and stays greyed out until at least one is picked; Cancel goes back to [parent].
  */
 class BlockPickScreen(
     private val parent: Screen?,
     title: Component,
-    private val onPick: (Block) -> Unit,
+    initial: Set<Block>,
+    private val doneLabel: Component,
+    private val onDone: (Set<Block>) -> Unit,
 ) : Screen(title) {
 
+    private val picked: MutableSet<Block> = LinkedHashSet(initial)
+
+    /** The blocks in order: those picked when the screen opened first, so an edit starts with them in view. */
+    private val order: List<Block> = initial.toList() + BLOCKS.filter { it !in initial }
     private var query = ""
     private var shown: List<Block> = emptyList()
     private var scroll = 0
     private var draggingBar = false
+    private var done: Button? = null
 
     private var gridLeft = 0
     private var gridTop = 0
@@ -38,12 +49,23 @@ class BlockPickScreen(
         val left = this.width / 2 - width / 2
         var y = 8 + font.lineHeight + 6
 
-        val search = EditBox(font, left, y, width, ROW, Component.translatable("gui.aboutfaceeasyplace.search"))
+        val third = (width - GAP * 2) / 3
+        val search = EditBox(font, left, y, third, ROW, Component.translatable("gui.aboutfaceeasyplace.search"))
         search.setHint(Component.translatable("gui.aboutfaceeasyplace.search_blocks"))
         search.setMaxLength(64)
         search.value = query
         search.setResponder { query = it; filter() }
         addRenderableWidget(search)
+        addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.all")) {
+            picked += shown
+            updateDone()
+        }.bounds(left + third + GAP, y, third, ROW)
+            .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.all.tip"))).build())
+        addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.none")) {
+            picked -= shown.toSet()
+            updateDone()
+        }.bounds(left + (third + GAP) * 2, y, width - (third + GAP) * 2, ROW)
+            .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.none.tip"))).build())
         y += ROW + GAP * 3
 
         columns = maxOf(1, (width - BAR - GAP) / TILE)
@@ -52,15 +74,22 @@ class BlockPickScreen(
         val footer = ROW + GAP * 4
         visibleRows = maxOf(1, (this.height - gridTop - footer) / TILE)
 
+        val half = (width - GAP) / 2
         val bottom = gridTop + visibleRows * TILE + GAP * 2
-        addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL) { onClose() }.bounds(left, bottom, width, ROW).build())
+        addRenderableWidget(Button.builder(CommonComponents.GUI_CANCEL) { onClose() }.bounds(left, bottom, half, ROW).build())
+        done = addRenderableWidget(Button.builder(doneLabel) { onDone(picked.toSet()) }.bounds(left + half + GAP, bottom, width - half - GAP, ROW).build())
+        updateDone()
         filter()
         setInitialFocus(search)
     }
 
+    private fun updateDone() {
+        done?.active = picked.isNotEmpty()
+    }
+
     private fun filter() {
         val words = query.trim().lowercase().split(' ').filter { it.isNotEmpty() }
-        shown = BLOCKS.filter { block ->
+        shown = order.filter { block ->
             val text = (block.name.string + " " + BuiltInRegistries.BLOCK.getKey(block)).lowercase()
             words.all { text.contains(it) }
         }
@@ -72,7 +101,7 @@ class BlockPickScreen(
 
     override fun extractRenderState(graphics: GuiGraphicsExtractor, mouseX: Int, mouseY: Int, partialTick: Float) {
         super.extractRenderState(graphics, mouseX, mouseY, partialTick)
-        graphics.centeredText(font, title, width / 2, 8, 0xFFFFFFFF.toInt())
+        graphics.centeredText(font, Component.translatable("gui.aboutfaceeasyplace.picked", title, picked.size), width / 2, 8, 0xFFFFFFFF.toInt())
 
         val gridRight = gridLeft + columns * TILE
         val gridBottom = gridTop + visibleRows * TILE
@@ -83,9 +112,15 @@ class BlockPickScreen(
                 val block = shown.getOrNull((row + scroll) * columns + column) ?: break
                 val x = gridLeft + column * TILE
                 val y = gridTop + row * TILE
+                val on = block in picked
                 val over = mouseX in x until x + TILE && mouseY in y until y + TILE
                 if (over) hovered = block
-                graphics.fill(x + 1, y + 1, x + TILE - 1, y + TILE - 1, if (over) 0x60FFFFFF else 0x30FFFFFF)
+                graphics.fill(x + 1, y + 1, x + TILE - 1, y + TILE - 1, when {
+                    over -> 0x60FFFFFF
+                    on -> 0x4033CC33
+                    else -> 0x30FFFFFF
+                })
+                if (on) graphics.outline(x, y, TILE, TILE, PICKED)
                 graphics.item(ItemStack(block), x + (TILE - 16) / 2, y + (TILE - 16) / 2)
             }
         }
@@ -100,9 +135,11 @@ class BlockPickScreen(
         }
 
         hovered?.let { block ->
+            val on = block in picked
             graphics.setComponentTooltipForNextFrame(font, listOf(
                 block.name,
-                Component.literal(BuiltInRegistries.BLOCK.getKey(block).toString()).withStyle { it.withColor(0x999999) },
+                Component.translatable(if (on) "gui.aboutfaceeasyplace.picked_yes" else "gui.aboutfaceeasyplace.picked_no")
+                    .withStyle { it.withColor(if (on) PICKED and 0xFFFFFF else 0x999999) },
             ), mouseX, mouseY)
         }
     }
@@ -126,7 +163,8 @@ class BlockPickScreen(
             if (x >= gridLeft && y >= gridTop && column in 0 until columns && row in 0 until visibleRows) {
                 val block = shown.getOrNull((row + scroll) * columns + column)
                 if (block != null) {
-                    onPick(block)
+                    if (!picked.remove(block)) picked += block
+                    updateDone()
                     return true
                 }
             }
@@ -174,10 +212,11 @@ class BlockPickScreen(
         const val GAP = 2
         const val TILE = 20
         const val BAR = 4
+        const val PICKED = 0xFF55FF55.toInt()
 
         /** Every block with an item to place it by, in the game's order. */
         val BLOCKS: List<Block> by lazy {
-            BuiltInRegistries.BLOCK.filter { block -> !block.defaultBlockState().isAir && block.asItem().let { it != net.minecraft.world.item.Items.AIR } }
+            BuiltInRegistries.BLOCK.filter { block -> !block.defaultBlockState().isAir && block.asItem() != Items.AIR }
         }
     }
 }
