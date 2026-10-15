@@ -75,8 +75,10 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                 DataManager.getSchematicPlacementManager().addSchematicPlacement(placement, false);
 
                 Substitutions.INSTANCE.getSwaps().clear();
-                Substitutions.INSTANCE.getSwaps().add(new Substitutions.Swap(Blocks.STONE_BRICKS, Blocks.DEEPSLATE_BRICKS));
-                Substitutions.INSTANCE.getSwaps().add(new Substitutions.Swap(Blocks.STONE_BRICK_STAIRS, Blocks.DEEPSLATE_BRICK_STAIRS));
+                // One swap as a group: either stone block may be either deepslate one, a stair only as a stair.
+                Substitutions.INSTANCE.getSwaps().add(new Substitutions.Swap("swap1",
+                        java.util.Set.of(Blocks.STONE_BRICKS, Blocks.STONE_BRICK_STAIRS),
+                        java.util.Set.of(Blocks.DEEPSLATE_BRICKS, Blocks.DEEPSLATE_BRICK_STAIRS)));
                 Substitutions.INSTANCE.setOn(placement, true);
             });
             // Built: a swap, a swapped stair the right way, a swapped stair the wrong way, and a wrong block.
@@ -98,6 +100,12 @@ public class SubstitutionGameTest implements FabricClientGameTest {
             });
             LOG.info("matches at x 0..3: {} (want YYnn)", matching);
             if (!matching.equals("YYnn")) throw new AssertionError("matches gave " + matching);
+
+            // In a group of bricks and stairs, a full block does not stand in for a stair.
+            boolean blockForStair = context.computeOnClient(c ->
+                    Substitutions.matches(1, Y, 0, stair, Blocks.DEEPSLATE_BRICKS.defaultBlockState()));
+            LOG.info("full block counted for a stair: {}", blockForStair);
+            if (blockForStair) throw new AssertionError("a full block counted for a stair");
 
             // The verifier: only the cobblestone and the backwards stair are wrong (not swaps); 4 and 5 are missing.
             context.runOnClient(c -> {
@@ -141,6 +149,17 @@ public class SubstitutionGameTest implements FabricClientGameTest {
             server.runCommand("tp @a 2.5 " + (Y + 2) + " -3.5 0 35");
             context.waitTicks(40);
             context.takeScreenshot("swaps-overlay");
+            // The settings: the swaps screen and the block picker.
+            context.setScreen(() -> new com.skystormer.aboutfaceeasyplace.gui.SubstitutionsScreen(null));
+            context.waitTicks(5);
+            context.takeScreenshot("swaps-screen");
+            context.setScreen(() -> new com.skystormer.aboutfaceeasyplace.gui.BlockPickScreen(null,
+                    net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.pick_from"),
+                    java.util.Set.of(Blocks.STONE_BRICKS, Blocks.STONE_BRICK_STAIRS),
+                    net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.next"), picked -> kotlin.Unit.INSTANCE));
+            context.waitTicks(5);
+            context.takeScreenshot("swaps-picker");
+            context.setScreen(() -> null);
             LOG.info("ALL CHECKS PASSED");
         }
     }
