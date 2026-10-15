@@ -277,12 +277,20 @@ object Substitutions {
         }
     }
 
-    /** Each block's substitutes across the profiles not in [off]: everything else in its groups. */
+    /**
+     * Each block's substitutes across the profiles not in [off]: everything else in its groups. A
+     * group's blocks bring the blocks placed by the same item (a sign its wall sign), which the
+     * block grid does not list on their own.
+     */
     private fun substitutesTable(off: Set<String>): Map<Block, Set<Block>> {
+        val byItem = BuiltInRegistries.BLOCK.groupBy { it.asItem() }
         val out = HashMap<Block, MutableSet<Block>>()
         for (profile in profiles) {
             if (profile.id in off) continue
-            for (group in profile.groups) for (block in group) out.getOrPut(block) { HashSet() } += group.filter { it !== block }
+            for (picked in profile.groups) {
+                val group = picked.flatMapTo(LinkedHashSet()) { block -> byItem[block.asItem()].orEmpty() + block }
+                for (block in group) out.getOrPut(block) { HashSet() } += group.filter { it !== block }
+            }
         }
         return out
     }
