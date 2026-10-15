@@ -17,7 +17,8 @@ import kotlin.math.roundToInt
 
 /**
  * Every block that has an item, as pictures like the creative inventory, to pick any number of.
- * Picked ones have a green outline, and those picked already come first; a click switches one. Search by name or id ("stairs", "oak");
+ * Picked ones have a green outline, and those picked already come first; a click switches one, and
+ * dragging from it switches every block passed over the same way (picking, or taking out). Search by name or id ("stairs", "oak");
  * All and None act on what the search shows. [done] (labelled [doneLabel]) hands the picked blocks
  * to [onDone], and stays greyed out until at least one is picked; Cancel goes back to [parent].
  */
@@ -37,6 +38,9 @@ class BlockPickScreen(
     private var shown: List<Block> = emptyList()
     private var scroll = 0
     private var draggingBar = false
+
+    /** While dragging across the grid: true to pick what is passed over, false to take it out. */
+    private var painting: Boolean? = null
     private var done: Button? = null
 
     private var gridLeft = 0
@@ -158,15 +162,12 @@ class BlockPickScreen(
                 dragBarTo(y)
                 return true
             }
-            val column = ((x - gridLeft) / TILE).toInt()
-            val row = ((y - gridTop) / TILE).toInt()
-            if (x >= gridLeft && y >= gridTop && column in 0 until columns && row in 0 until visibleRows) {
-                val block = shown.getOrNull((row + scroll) * columns + column)
-                if (block != null) {
-                    if (!picked.remove(block)) picked += block
-                    updateDone()
-                    return true
-                }
+            val block = blockAt(x, y)
+            if (block != null) {
+                val pick = block !in picked
+                painting = pick
+                paint(block, pick)
+                return true
             }
         }
         return super.mouseClicked(event, doubleClick)
@@ -177,15 +178,37 @@ class BlockPickScreen(
             dragBarTo(event.y())
             return true
         }
+        painting?.let { pick ->
+            blockAt(event.x(), event.y())?.let { paint(it, pick) }
+            return true
+        }
         return super.mouseDragged(event, dx, dy)
     }
 
     override fun mouseReleased(event: MouseButtonEvent): Boolean {
+        if (painting != null) {
+            painting = null
+            return true
+        }
         if (draggingBar) {
             draggingBar = false
             return true
         }
         return super.mouseReleased(event)
+    }
+
+    /** The block in the grid under x, y, or null. */
+    private fun blockAt(x: Double, y: Double): Block? {
+        if (x < gridLeft || y < gridTop) return null
+        val column = ((x - gridLeft) / TILE).toInt()
+        val row = ((y - gridTop) / TILE).toInt()
+        if (column !in 0 until columns || row !in 0 until visibleRows) return null
+        return shown.getOrNull((row + scroll) * columns + column)
+    }
+
+    private fun paint(block: Block, pick: Boolean) {
+        if (pick) picked += block else picked -= block
+        updateDone()
     }
 
     private fun dragBarTo(mouseY: Double) {
