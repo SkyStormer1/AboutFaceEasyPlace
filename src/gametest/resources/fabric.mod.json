@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "aboutfaceeasyplace-test",
+  "version": "1.0.0",
+  "name": "About Face Easy Place tests",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["com.skystormer.aboutfaceeasyplace.test.NotIde"],
+    "fabric-client-gametest": ["com.skystormer.aboutfaceeasyplace.test.SubstitutionGameTest"]
+  }
+}

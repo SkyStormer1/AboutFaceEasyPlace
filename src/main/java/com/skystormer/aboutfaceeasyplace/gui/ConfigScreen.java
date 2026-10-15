@@ -4,6 +4,7 @@ import com.skystormer.aboutfaceeasyplace.Config;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.StringWidget;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
@@ -11,7 +12,7 @@ import net.minecraft.network.chat.Component;
 import java.util.function.Consumer;
 
 /**
- * Four switches and a Done button.
+ * Four switches, the way to block substitution's settings, and a Done button.
  *
  * Built from plain vanilla widgets rather than a config library, so that the mod carries no
  * dependency for the sake of a screen most people will open once. Mod Menu is what usually opens
@@ -45,6 +46,15 @@ public class ConfigScreen extends Screen {
         this.addRenderableWidget(toggle(left, y, "show_messages", Config.getShowMessages(), Config::setShowMessages));
         y += ROW + GAP;
         this.addRenderableWidget(toggle(left, y, "verbose_logging", Config.getVerboseLogging(), Config::setVerboseLogging));
+        y += ROW + GAP;
+        this.addRenderableWidget(
+                Button.builder(Component.translatable("config.aboutfaceeasyplace.substitutions"), button -> {
+                            Config.save();
+                            this.minecraft.gui.setScreen(new SubstitutionsScreen(this));
+                        })
+                        .bounds(left, y, WIDTH, ROW)
+                        .tooltip(Tooltip.create(Component.translatable("config.aboutfaceeasyplace.substitutions.tip")))
+                        .build());
         y += (ROW + GAP) * 2;
 
         this.addRenderableWidget(
