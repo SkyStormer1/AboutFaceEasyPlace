@@ -58,5 +58,5 @@
   "gui.aboutfaceeasyplace.placement_title": "Substitutes in %s",
   "gui.aboutfaceeasyplace.placement.reset": "Uses every profile in this placement again.",
   "gui.aboutfaceeasyplace.substitutes_here": "Substitutes in this placement",
-  "gui.aboutfaceeasyplace.no_profiles": "No profiles yet: make one on the Block substitutes screen."
+  "gui.aboutfaceeasyplace.edit_profiles": "Edit profiles…"
 }
