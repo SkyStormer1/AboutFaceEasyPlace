@@ -11,8 +11,8 @@ import net.minecraft.world.level.block.Block
 
 /**
  * Block substitution's settings: each Litematica placement loaded now, with its switch and the way
- * to the swaps it leaves out, then the swaps themselves, which every placement shares. Every change
- * is saved and shown in the world straight away.
+ * to the links it leaves out, then every block with stand-ins, which every placement shares. Every
+ * change is saved and shown in the world straight away.
  */
 class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.translatable("gui.aboutfaceeasyplace.substitutions")) {
 
@@ -20,7 +20,7 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
         get() = Component.translatable("gui.aboutfaceeasyplace.substitutions.reset").string
 
     override fun resetToDefaults() {
-        Substitutions.swaps.clear()
+        Substitutions.links.clear()
         Substitutions.placements().forEach { Substitutions.choiceFor(it).apply { on = false; off.clear() } }
         Substitutions.changed()
     }
@@ -65,19 +65,24 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
         y += GAP * 3
         y = heading(left, y, "gui.aboutfaceeasyplace.swap_list")
         val remove = 60
-        for (swap in Substitutions.swaps.toList()) {
-            addRenderableWidget(Button.builder(label(swap)) { edit(swap) }
+        for (block in Substitutions.linkedBlocks()) {
+            addRenderableWidget(Button.builder(label(block)) { pickStandIns(setOf(block)) }
                 .bounds(left, y, WIDTH - remove - GAP, ROW)
-                .tooltip(Tooltip.create(details(swap)))
+                .tooltip(Tooltip.create(details(block)))
                 .build())
             addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.remove")) {
-                Substitutions.swaps.remove(swap)
+                Substitutions.setStandIns(block, emptySet())
                 Substitutions.changed()
                 rebuildWidgets()
-            }.bounds(left + WIDTH - remove, y, remove, ROW).build())
+            }.bounds(left + WIDTH - remove, y, remove, ROW)
+                .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.remove.tip", block.name)))
+                .build())
             y += ROW + GAP
         }
-        addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.add_swap")) { edit(null) }
+        addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.add_swap")) {
+            minecraft.gui.setScreen(BlockPickScreen(this, Component.translatable("gui.aboutfaceeasyplace.pick_from"),
+                emptySet(), Component.translatable("gui.aboutfaceeasyplace.next")) { blocks -> pickStandIns(blocks) })
+        }
             .bounds(left, y, WIDTH, ROW)
             .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.add_swap.tip")))
             .build())
@@ -89,20 +94,22 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
     }
 
     /**
-     * Picks the schematic's blocks, then the blocks that may stand in for them: a new swap, or
-     * [swap] changed in place (keeping its id, so placements that leave it out still do).
+     * Picks the stand-ins for [blocks], each linked both ways. For one block, the picked ones become
+     * exactly its stand-ins (one taken out is unlinked); for several, the picked ones are added to each.
      */
-    private fun edit(swap: Substitutions.Swap?) {
-        minecraft.gui.setScreen(BlockPickScreen(this, Component.translatable("gui.aboutfaceeasyplace.pick_from"),
-            swap?.from.orEmpty(), Component.translatable("gui.aboutfaceeasyplace.next")) { from ->
-            minecraft.gui.setScreen(BlockPickScreen(this, Component.translatable("gui.aboutfaceeasyplace.pick_to"),
-                swap?.to.orEmpty(), Component.translatable("gui.aboutfaceeasyplace.save")) { to ->
-                val made = if (swap == null) Substitutions.newSwap(from, to) else Substitutions.Swap(swap.id, from, to)
-                val at = Substitutions.swaps.indexOf(swap)
-                if (at >= 0) Substitutions.swaps[at] = made else Substitutions.swaps += made
-                Substitutions.changed()
-                minecraft.gui.setScreen(this)
-            })
+    private fun pickStandIns(blocks: Set<Block>) {
+        val one = blocks.singleOrNull()
+        val title = if (one != null) Component.translatable("gui.aboutfaceeasyplace.pick_to_one", one.name)
+        else Component.translatable("gui.aboutfaceeasyplace.pick_to")
+        minecraft.gui.setScreen(BlockPickScreen(this, title, one?.let(Substitutions::standInsFor).orEmpty(),
+            Component.translatable("gui.aboutfaceeasyplace.save")) { picked ->
+            if (one != null) {
+                Substitutions.setStandIns(one, picked)
+            } else {
+                blocks.forEach { block -> Substitutions.setStandIns(block, Substitutions.standInsFor(block) + picked) }
+            }
+            Substitutions.changed()
+            minecraft.gui.setScreen(this)
         })
     }
 
@@ -117,22 +124,21 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
         private const val SWITCH = 80
         private const val EXCEPT = 70
 
-        /** "Stone Bricks +2 → Deepslate Bricks": the first of each side, and how many more. */
-        fun label(swap: Substitutions.Swap): Component =
-            Component.translatable("gui.aboutfaceeasyplace.swap", side(swap.from), side(swap.to))
-
-        private fun side(blocks: Set<Block>): Component {
-            val first = blocks.first().name.copy()
-            return if (blocks.size == 1) first else first.append(" +${blocks.size - 1}")
+        /** "Smooth Stone ↔ Cobblestone +2": the block, its first stand-in, and how many more. */
+        fun label(block: Block): Component {
+            val standIns = Substitutions.standInsFor(block)
+            val first = standIns.first().name.copy()
+            return Component.translatable("gui.aboutfaceeasyplace.swap", block.name,
+                if (standIns.size == 1) first else first.append(" +${standIns.size - 1}"))
         }
 
-        /** Every block of both sides, for the tooltip. */
-        fun details(swap: Substitutions.Swap): Component {
-            val out = Component.translatable("gui.aboutfaceeasyplace.swap_from").copy()
-            swap.from.forEach { out.append("\n  ").append(it.name) }
-            out.append("\n").append(Component.translatable("gui.aboutfaceeasyplace.swap_to"))
-            swap.to.forEach { out.append("\n  ").append(it.name) }
+        /** Every stand-in of [block], for the tooltip. */
+        fun details(block: Block): Component {
+            val out = Component.translatable("gui.aboutfaceeasyplace.swap_from", block.name).copy()
+            Substitutions.standInsFor(block).forEach { out.append("\n  ").append(it.name) }
             return out.append("\n").append(Component.translatable("gui.aboutfaceeasyplace.swap_edit"))
         }
+
+        fun label(link: Substitutions.Link): Component = Component.translatable("gui.aboutfaceeasyplace.swap", link.a.name, link.b.name)
     }
 }

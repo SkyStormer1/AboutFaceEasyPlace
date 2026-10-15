@@ -27,15 +27,20 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * Block substitution: a list of swaps, each a group ("Stone Bricks or Cobblestone may be Deepslate
- * Bricks or Tuff"), kept for every schematic, and switched on placement by placement, each of which can leave out any of the swaps.
- * Where a placement has it on, a swapped block counts as the right one everywhere Litematica looks:
- * the verifier counts it correct, the overlay shows nothing to do, and Easy Place leaves it alone.
- * Where nothing is there yet, Easy Place puts down whichever of the block and its swaps you have,
- * the one in your hand first.
+ * Block substitution: blocks linked to the blocks that may stand in for them, each link both ways
+ * (Smooth Stone ↔ Cobblestone: either may be built where the schematic has the other). Links are
+ * only what is set: Smooth Stone ↔ Cobblestone and Smooth Stone ↔ Deepslate do not make Cobblestone
+ * and Deepslate stand-ins for each other. Kept for every schematic, and switched on placement by
+ * placement, each of which can leave out any of the links.
  *
- * A swap carries the block's shape across: a swapped stair keeps its facing and half, a slab its
- * type, by the properties the two blocks share. A block only counts as the swap when those agree.
+ * Where a placement has it on, a stand-in counts as the right block everywhere Litematica looks:
+ * the verifier counts it correct, the overlay shows nothing to do, and Easy Place leaves it alone.
+ * Where nothing is there yet, Easy Place puts down whichever of the block and its stand-ins you
+ * have, the one in your hand first.
+ *
+ * A stand-in carries the block's shape across: a stair keeps its facing and half, a slab its type,
+ * by the properties the two blocks share. It only counts where those agree and it takes up the same
+ * space, so in links among bricks and stairs, only a stair stands in for a stair.
  *
  * Kept in `config/aboutfaceeasyplace-substitutions.json`. Litematica's chunk builder threads ask
  * [shown] for every block they draw, so what they read is an unchanging snapshot ([areas], [byBlock]),
@@ -43,17 +48,38 @@ import java.nio.file.Path
  */
 object Substitutions {
 
-    /**
-     * One swap: any block of [to] may stand in for any block of [from]. Known by [id], which stays
-     * the same when the swap is edited, so a placement that leaves it out still does.
-     */
-    class Swap(val id: String, val from: Set<Block>, val to: Set<Block>)
+    /** A two-way link: either block may stand in for the other. The same whichever way round it is made. */
+    class Link private constructor(val a: Block, val b: Block) {
+        /** What a placement that leaves this link out remembers it by. */
+        val id: String = "${idOf(a)}|${idOf(b)}"
 
-    /** A new swap with an id no other has. */
-    fun newSwap(from: Set<Block>, to: Set<Block>): Swap {
-        var n = swaps.size + 1
-        while (swaps.any { it.id == "swap$n" }) n++
-        return Swap("swap$n", from, to)
+        fun other(block: Block): Block? = when (block) {
+            a -> b
+            b -> a
+            else -> null
+        }
+
+        override fun equals(other: Any?) = other is Link && other.id == id
+        override fun hashCode() = id.hashCode()
+
+        companion object {
+            fun of(x: Block, y: Block): Link = if (idOf(x) <= idOf(y)) Link(x, y) else Link(y, x)
+        }
+    }
+
+    /** The links, in the order they were made. */
+    val links: MutableSet<Link> = LinkedHashSet()
+
+    /** Every block with a stand-in, each once, by name. */
+    fun linkedBlocks(): List<Block> = links.flatMap { listOf(it.a, it.b) }.distinct().sortedBy { it.name.string }
+
+    /** The blocks that may stand in for [block], in the order they were linked. */
+    fun standInsFor(block: Block): Set<Block> = links.mapNotNullTo(LinkedHashSet()) { it.other(block) }
+
+    /** Makes [standIns] exactly the blocks linked to [block]: links to others are taken away, new ones made. */
+    fun setStandIns(block: Block, standIns: Set<Block>) {
+        links.removeIf { it.other(block) != null && it.other(block) !in standIns }
+        standIns.filter { it !== block }.forEach { links += Link.of(block, it) }
     }
 
     /** What a placement has chosen: whether swaps apply in it, and which ones it leaves out. */
@@ -72,9 +98,6 @@ object Substitutions {
     private val file: Path
         get() = FabricLoader.getInstance().configDir.resolve("aboutfaceeasyplace-substitutions.json")
 
-    /** The swaps, in the order they were added. */
-    val swaps: MutableList<Swap> = ArrayList()
-
     /** Each placement's choice, by [keyOf]. */
     private val choices = HashMap<String, PlacementChoice>()
 
@@ -82,7 +105,7 @@ object Substitutions {
     private var areas: List<Area> = emptyList()
 
     @Volatile
-    private var byBlock: Map<Block, List<Swap>> = emptyMap()
+    private var byBlock: Map<Block, List<Link>> = emptyMap()
 
     private var ticks = 0
     private var broken = false
@@ -90,17 +113,18 @@ object Substitutions {
     // ---- What Litematica's hooks ask ----
 
     /**
-     * Whether [client] at x, y, z is an allowed swap for [schematic]: a block of a swap the
+     * Whether [client] at x, y, z is an allowed stand-in for [schematic]: linked to it, by a link the
      * placement there has on, agreeing with the schematic's block on every property they share,
      * and the same shape (so in a swap of bricks and stairs, only a stair stands in for a stair).
      */
     @JvmStatic
     fun matches(x: Int, y: Int, z: Int, schematic: BlockState, client: BlockState): Boolean {
         if (schematic === client || schematic.isAir || client.isAir || schematic.block === client.block) return false
-        val swaps = byBlock[schematic.block] ?: return false
-        if (swaps.none { client.block in it.to }) return false
+        val links = byBlock[schematic.block] ?: return false
+        if (links.none { it.other(schematic.block) === client.block }) return false
         val area = areas.firstOrNull { it.contains(x, y, z) } ?: return false
-        return swaps.any { client.block in it.to && it.id !in area.off } && shapesAgree(schematic, client) && sameShape(schematic, client)
+        return links.any { it.other(schematic.block) === client.block && it.id !in area.off } &&
+            shapesAgree(schematic, client) && sameShape(schematic, client)
     }
 
     /** What Litematica should take the schematic to hold at [pos], with [client] there: the swap when it [matches]. */
@@ -155,10 +179,10 @@ object Substitutions {
      * where no placement with swaps on covers it.
      */
     private fun allowedAt(pos: BlockPos, state: BlockState): List<Block> {
-        val swaps = byBlock[state.block] ?: return emptyList()
+        val links = byBlock[state.block] ?: return emptyList()
         val area = areas.firstOrNull { it.contains(pos.x, pos.y, pos.z) } ?: return emptyList()
-        return swaps.filter { it.id !in area.off }.flatMap { it.to }.distinct()
-            .filter { it !== state.block && sameShape(state, swapped(state, it)) }
+        return links.filter { it.id !in area.off }.mapNotNull { it.other(state.block) }
+            .filter { sameShape(state, swapped(state, it)) }
     }
 
     /** Whether the two take up the same space: a full block for a full block, a stair for a stair facing the same way. */
@@ -294,16 +318,19 @@ object Substitutions {
 
     fun load() {
         val path = file
-        swaps.clear()
+        links.clear()
         choices.clear()
         try {
             if (Files.notExists(path)) return
             val json = JsonParser.parseString(Files.readString(path)).asJsonObject
+            json.getAsJsonArray("links")?.forEach { e ->
+                val pair = e.asJsonArray.mapNotNull { blockOf(it.asString) }
+                if (pair.size == 2 && pair[0] !== pair[1]) links += Link.of(pair[0], pair[1])
+            }
+            // The first versions kept one-way swaps ("from" blocks to "to" blocks): each pair becomes a link.
             json.getAsJsonArray("swaps")?.forEach { e ->
                 val o = e.asJsonObject
-                val from = blocksOf(o.get("from"))
-                val to = blocksOf(o.get("to"))
-                if (from.isNotEmpty() && to.isNotEmpty()) swaps += Swap(o.get("id")?.asString ?: newSwap(from, to).id, from, to)
+                for (from in blocksOf(o.get("from"))) for (to in blocksOf(o.get("to"))) if (from !== to) links += Link.of(from, to)
             }
             json.getAsJsonObject("placements")?.entrySet()?.forEach { (key, value) ->
                 val o = value.asJsonObject
@@ -318,10 +345,10 @@ object Substitutions {
         byBlock = indexed()
     }
 
-    /** The swaps by each block they replace, for the lookups. */
-    private fun indexed(): Map<Block, List<Swap>> {
-        val out = HashMap<Block, MutableList<Swap>>()
-        swaps.forEach { swap -> swap.from.forEach { out.getOrPut(it) { ArrayList() } += swap } }
+    /** The links by each of their blocks, for the lookups. */
+    private fun indexed(): Map<Block, List<Link>> {
+        val out = HashMap<Block, MutableList<Link>>()
+        links.forEach { link -> out.getOrPut(link.a) { ArrayList() } += link; out.getOrPut(link.b) { ArrayList() } += link }
         return out
     }
 
@@ -337,14 +364,8 @@ object Substitutions {
         try {
             Files.createDirectories(path.parent)
             val json = JsonObject()
-            json.add("swaps", JsonArray().also { array ->
-                swaps.forEach { swap ->
-                    array.add(JsonObject().apply {
-                        addProperty("id", swap.id)
-                        add("from", JsonArray().also { a -> swap.from.forEach { a.add(idOf(it)) } })
-                        add("to", JsonArray().also { a -> swap.to.forEach { a.add(idOf(it)) } })
-                    })
-                }
+            json.add("links", JsonArray().also { array ->
+                links.forEach { link -> array.add(JsonArray().apply { add(idOf(link.a)); add(idOf(link.b)) }) }
             })
             json.add("placements", JsonObject().also { all ->
                 // A placement left as it came (off, nothing left out) is not worth a line.

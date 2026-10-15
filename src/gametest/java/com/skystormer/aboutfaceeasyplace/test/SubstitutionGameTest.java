@@ -74,11 +74,12 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                 SchematicPlacement placement = SchematicPlacement.createFor(schematic, origin, "swap test", true, true);
                 DataManager.getSchematicPlacementManager().addSchematicPlacement(placement, false);
 
-                Substitutions.INSTANCE.getSwaps().clear();
-                // One swap as a group: either stone block may be either deepslate one, a stair only as a stair.
-                Substitutions.INSTANCE.getSwaps().add(new Substitutions.Swap("swap1",
-                        java.util.Set.of(Blocks.STONE_BRICKS, Blocks.STONE_BRICK_STAIRS),
-                        java.util.Set.of(Blocks.DEEPSLATE_BRICKS, Blocks.DEEPSLATE_BRICK_STAIRS)));
+                Substitutions.INSTANCE.getLinks().clear();
+                // Links, both ways: each stone block to both deepslate ones (a stair only stands in as a stair),
+                // and cobblestone to deepslate bricks only.
+                Substitutions.INSTANCE.setStandIns(Blocks.STONE_BRICKS, java.util.Set.of(Blocks.DEEPSLATE_BRICKS, Blocks.DEEPSLATE_BRICK_STAIRS));
+                Substitutions.INSTANCE.setStandIns(Blocks.STONE_BRICK_STAIRS, java.util.Set.of(Blocks.DEEPSLATE_BRICKS, Blocks.DEEPSLATE_BRICK_STAIRS));
+                Substitutions.INSTANCE.setStandIns(Blocks.COBBLESTONE, java.util.Set.of(Blocks.DEEPSLATE_BRICKS));
                 Substitutions.INSTANCE.setOn(placement, true);
             });
             // Built: a swap, a swapped stair the right way, a swapped stair the wrong way, and a wrong block.
@@ -101,7 +102,14 @@ public class SubstitutionGameTest implements FabricClientGameTest {
             LOG.info("matches at x 0..3: {} (want YYnn)", matching);
             if (!matching.equals("YYnn")) throw new AssertionError("matches gave " + matching);
 
-            // In a group of bricks and stairs, a full block does not stand in for a stair.
+            // Links work both ways, only where made, and a full block does not stand in for a stair.
+            String links = context.computeOnClient(c -> ""
+                    + Substitutions.matches(0, Y, 0, Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.STONE_BRICKS.defaultBlockState())
+                    + " " + Substitutions.matches(0, Y, 0, Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState())
+                    + " " + Substitutions.matches(0, Y, 0, Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState()));
+            LOG.info("deepslate<-stone, deepslate<-cobble, stone<-cobble: {} (want true true false)", links);
+            if (!links.equals("true true false")) throw new AssertionError("links: " + links);
+
             boolean blockForStair = context.computeOnClient(c ->
                     Substitutions.matches(1, Y, 0, stair, Blocks.DEEPSLATE_BRICKS.defaultBlockState()));
             LOG.info("full block counted for a stair: {}", blockForStair);
