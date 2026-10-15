@@ -54,6 +54,7 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                 hook(out, "fi.dy.masa.litematica.render.schematic.ChunkRendererSchematicVbo", "swapsLookFinished");
                 hook(out, "fi.dy.masa.litematica.util.WorldUtils", "placeSwaps");
                 hook(out, "fi.dy.masa.litematica.util.EasyPlaceUtils", "placeSwaps");
+                hook(out, "fi.dy.masa.litematica.gui.GuiPlacementConfiguration", "addSwapsButtons");
                 return out.isEmpty() ? null : String.join(", ", out);
             });
             LOG.info("hooks missing: {}", missing == null ? "none" : missing);
@@ -167,6 +168,10 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                     net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.next"), picked -> kotlin.Unit.INSTANCE));
             context.waitTicks(5);
             context.takeScreenshot("swaps-picker");
+            context.setScreen(() -> new fi.dy.masa.litematica.gui.GuiPlacementConfiguration(placement()));
+            context.runOnClient(c -> c.gui.toastManager().clear());
+            context.waitTicks(5);
+            context.takeScreenshot("litematica-placement-screen");
             context.setScreen(() -> null);
             LOG.info("ALL CHECKS PASSED");
         }

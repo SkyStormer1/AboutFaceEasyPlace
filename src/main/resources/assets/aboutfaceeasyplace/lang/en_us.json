@@ -55,5 +55,7 @@
   "gui.aboutfaceeasyplace.swap_from": "%s may be, and may stand in for:",
   "gui.aboutfaceeasyplace.swap_edit": "Click to change.",
   "gui.aboutfaceeasyplace.pick_to_one": "Stand-ins for %s (both ways)",
-  "gui.aboutfaceeasyplace.remove.tip": "Unlink %s from all its stand-ins."
+  "gui.aboutfaceeasyplace.remove.tip": "Unlink %s from all its stand-ins.",
+  "aboutfaceeasyplace.litematica.swaps": "Block swaps: %s",
+  "gui.aboutfaceeasyplace.litematica.links.tip": "Which stand-in links this placement uses (About Face Easy Place)."
 }
