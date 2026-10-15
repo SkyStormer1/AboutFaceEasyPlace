@@ -10,17 +10,15 @@ import net.minecraft.network.chat.Component
 import net.minecraft.world.level.block.Block
 
 /**
- * Block substitution's settings: each Litematica placement loaded now, with its switch and the way
- * to the links it leaves out, then every block with stand-ins, which every placement shares. Every
- * change is saved and shown in the world straight away.
+ * Block substitutes: your profiles, to make, open and delete, then each Litematica placement loaded
+ * now, with its switch and the profiles it uses. Every change is saved and shown straight away.
  */
-class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.translatable("gui.aboutfaceeasyplace.substitutions")) {
+class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.translatable("gui.aboutfaceeasyplace.substitutes")) {
 
     override val resetTip: String
-        get() = Component.translatable("gui.aboutfaceeasyplace.substitutions.reset").string
+        get() = Component.translatable("gui.aboutfaceeasyplace.substitutes.reset").string
 
     override fun resetToDefaults() {
-        Substitutions.links.clear()
         Substitutions.placements().forEach { Substitutions.choiceFor(it).apply { on = false; off.clear() } }
         Substitutions.changed()
     }
@@ -29,13 +27,35 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
         val left = width / 2 - WIDTH / 2
         var y = top
 
+        y = heading(left, y, "gui.aboutfaceeasyplace.profiles")
+        val delete = 60
+        for (profile in Substitutions.profiles.toList()) {
+            addRenderableWidget(Button.builder(Component.literal(profile.name)) {
+                minecraft.gui.setScreen(ProfileScreen(this, profile))
+            }
+                .bounds(left, y, WIDTH - delete - GAP, ROW)
+                .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.profile.tip", profile.groups.size)))
+                .build())
+            addRenderableWidget(deleteButton(left + WIDTH - delete, y, delete) {
+                Substitutions.profiles.remove(profile)
+                Substitutions.changed()
+                rebuildWidgets()
+            })
+            y += ROW + GAP
+        }
+        addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.new_profile")) {
+            val profile = Substitutions.newProfile(Component.translatable("gui.aboutfaceeasyplace.new_profile_name", Substitutions.profiles.size + 1).string)
+            Substitutions.changed()
+            minecraft.gui.setScreen(ProfileScreen(this, profile))
+        }.bounds(left, y, WIDTH, ROW).build())
+        y += ROW + GAP * 4
+
         y = heading(left, y, "gui.aboutfaceeasyplace.placements")
         val placements = Substitutions.placements()
         if (placements.isEmpty()) {
             addRenderableWidget(StringWidget(left, y, WIDTH, ROW, Component.translatable("gui.aboutfaceeasyplace.no_placements"), font))
-            y += ROW + GAP
         }
-        val nameWidth = WIDTH - SWITCH - EXCEPT - GAP * 2
+        val nameWidth = WIDTH - SWITCH - PROFILES - GAP * 2
         for (placement in placements) {
             val choice = Substitutions.choiceFor(placement)
             val name = Button.builder(Component.literal(font.plainSubstrByWidth(placement.name, nameWidth - 8))) {}
@@ -46,71 +66,24 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
             addRenderableWidget(name)
             addRenderableWidget(
                 CycleButton.onOffBuilder(choice.on)
-                    .create(left + nameWidth + GAP, y, SWITCH, ROW, Component.translatable("gui.aboutfaceeasyplace.swaps")) { _, on ->
+                    .create(left + nameWidth + GAP, y, SWITCH, ROW, Component.translatable("gui.aboutfaceeasyplace.substitutes_short")) { _, on ->
                         Substitutions.setOn(placement, on)
                     }
-                    .also { it.setTooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.swaps.tip"))) }
+                    .also { it.setTooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.switch.tip"))) }
             )
-            addRenderableWidget(
-                Button.builder(Component.translatable("gui.aboutfaceeasyplace.except")) {
-                    minecraft.gui.setScreen(PlacementSwapsScreen(this, placement))
-                }
-                    .bounds(left + nameWidth + GAP + SWITCH + GAP, y, EXCEPT, ROW)
-                    .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.except.tip", choice.off.size)))
-                    .build()
-            )
-            y += ROW + GAP
-        }
-
-        y += GAP * 3
-        y = heading(left, y, "gui.aboutfaceeasyplace.swap_list")
-        val remove = 60
-        for (block in Substitutions.linkedBlocks()) {
-            addRenderableWidget(Button.builder(label(block)) { pickStandIns(setOf(block)) }
-                .bounds(left, y, WIDTH - remove - GAP, ROW)
-                .tooltip(Tooltip.create(details(block)))
-                .build())
-            addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.remove")) {
-                Substitutions.setStandIns(block, emptySet())
-                Substitutions.changed()
-                rebuildWidgets()
-            }.bounds(left + WIDTH - remove, y, remove, ROW)
-                .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.remove.tip", block.name)))
+            addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.profiles_button")) {
+                minecraft.gui.setScreen(PlacementProfilesScreen(this, placement))
+            }
+                .bounds(left + nameWidth + GAP + SWITCH + GAP, y, PROFILES, ROW)
+                .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.profiles_button.tip")))
                 .build())
             y += ROW + GAP
         }
-        addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.add_swap")) {
-            minecraft.gui.setScreen(BlockPickScreen(this, Component.translatable("gui.aboutfaceeasyplace.pick_from"),
-                emptySet(), Component.translatable("gui.aboutfaceeasyplace.next")) { blocks -> pickStandIns(blocks) })
-        }
-            .bounds(left, y, WIDTH, ROW)
-            .tooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.add_swap.tip")))
-            .build())
     }
 
     private fun heading(left: Int, y: Int, key: String): Int {
         addRenderableWidget(StringWidget(left, y, WIDTH, font.lineHeight, Component.translatable(key), font))
         return y + font.lineHeight + GAP * 2
-    }
-
-    /**
-     * Picks the stand-ins for [blocks], each linked both ways. For one block, the picked ones become
-     * exactly its stand-ins (one taken out is unlinked); for several, the picked ones are added to each.
-     */
-    private fun pickStandIns(blocks: Set<Block>) {
-        val one = blocks.singleOrNull()
-        val title = if (one != null) Component.translatable("gui.aboutfaceeasyplace.pick_to_one", one.name)
-        else Component.translatable("gui.aboutfaceeasyplace.pick_to")
-        minecraft.gui.setScreen(BlockPickScreen(this, title, one?.let(Substitutions::standInsFor).orEmpty(),
-            Component.translatable("gui.aboutfaceeasyplace.save")) { picked ->
-            if (one != null) {
-                Substitutions.setStandIns(one, picked)
-            } else {
-                blocks.forEach { block -> Substitutions.setStandIns(block, Substitutions.standInsFor(block) + picked) }
-            }
-            Substitutions.changed()
-            minecraft.gui.setScreen(this)
-        })
     }
 
     override fun onClose() {
@@ -121,24 +94,33 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
         private const val WIDTH = 300
         private const val ROW = 20
         private const val GAP = 2
-        private const val SWITCH = 80
-        private const val EXCEPT = 70
+        private const val SWITCH = 96
+        private const val PROFILES = 70
 
-        /** "Smooth Stone ↔ Cobblestone +2": the block, its first stand-in, and how many more. */
-        fun label(block: Block): Component {
-            val standIns = Substitutions.standInsFor(block)
-            val first = standIns.first().name.copy()
-            return Component.translatable("gui.aboutfaceeasyplace.swap", block.name,
-                if (standIns.size == 1) first else first.append(" +${standIns.size - 1}"))
+        /** A Delete button that asks first: the first click only changes it to "Sure?". */
+        fun deleteButton(x: Int, y: Int, width: Int, onDelete: () -> Unit): Button {
+            var armed = false
+            return Button.builder(Component.translatable("gui.aboutfaceeasyplace.delete")) { button ->
+                if (armed) onDelete() else {
+                    armed = true
+                    button.message = Component.translatable("gui.aboutfaceeasyplace.delete_sure")
+                }
+            }.bounds(x, y, width, 20).build()
         }
 
-        /** Every stand-in of [block], for the tooltip. */
-        fun details(block: Block): Component {
-            val out = Component.translatable("gui.aboutfaceeasyplace.swap_from", block.name).copy()
-            Substitutions.standInsFor(block).forEach { out.append("\n  ").append(it.name) }
-            return out.append("\n").append(Component.translatable("gui.aboutfaceeasyplace.swap_edit"))
+        /** "Glass, White Stained Glass +15": the first two blocks of a group, and how many more. */
+        fun label(group: Set<Block>): Component {
+            val out = Component.empty()
+            group.take(2).forEachIndexed { i, block -> if (i > 0) out.append(", "); out.append(block.name) }
+            if (group.size > 2) out.append(" +${group.size - 2}")
+            return out
         }
 
-        fun label(link: Substitutions.Link): Component = Component.translatable("gui.aboutfaceeasyplace.swap", link.a.name, link.b.name)
+        /** Every block of a group, for its tooltip. */
+        fun details(group: Set<Block>): Component {
+            val out = Component.translatable("gui.aboutfaceeasyplace.group.tip").copy()
+            group.forEach { out.append("\n  ").append(it.name) }
+            return out
+        }
     }
 }
