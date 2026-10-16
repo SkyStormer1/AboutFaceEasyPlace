@@ -29,8 +29,8 @@ import java.util.List;
 
 /**
  * Block substitution in a test world: a row of stone bricks and stone brick stairs as a Litematica
- * placement, deepslate swaps for both, and checks that the hooks are in Litematica, that the
- * verifier counts the swaps as right and nothing else, and that both Easy Place paths put a swap
+ * placement, deepslate as a substitute for both, and checks that the hooks are in Litematica, that the
+ * verifier counts the substitutes as right and nothing else, and that both Easy Place paths put a substitute
  * down when that is all you have.
  */
 public class SubstitutionGameTest implements FabricClientGameTest {
@@ -50,11 +50,11 @@ public class SubstitutionGameTest implements FabricClientGameTest {
             // The hooks are woven into Litematica's classes once those load.
             String missing = context.computeOnClient(c -> {
                 List<String> out = new ArrayList<>();
-                hook(out, "fi.dy.masa.litematica.schematic.verifier.SchematicVerifier", "countSwapsAsRight");
-                hook(out, "fi.dy.masa.litematica.render.schematic.ChunkRendererSchematicVbo", "swapsLookFinished");
-                hook(out, "fi.dy.masa.litematica.util.WorldUtils", "placeSwaps");
-                hook(out, "fi.dy.masa.litematica.util.EasyPlaceUtils", "placeSwaps");
-                hook(out, "fi.dy.masa.litematica.gui.GuiPlacementConfiguration", "addSwapsButtons");
+                hook(out, "fi.dy.masa.litematica.schematic.verifier.SchematicVerifier", "countSubstitutesAsRight");
+                hook(out, "fi.dy.masa.litematica.render.schematic.ChunkRendererSchematicVbo", "substitutesLookFinished");
+                hook(out, "fi.dy.masa.litematica.util.WorldUtils", "placeSubstitutes");
+                hook(out, "fi.dy.masa.litematica.util.EasyPlaceUtils", "placeSubstitutes");
+                hook(out, "fi.dy.masa.litematica.gui.GuiPlacementConfiguration", "addSubstitutesButtons");
                 return out.isEmpty() ? null : String.join(", ", out);
             });
             LOG.info("hooks missing: {}", missing == null ? "none" : missing);
@@ -65,14 +65,14 @@ public class SubstitutionGameTest implements FabricClientGameTest {
             context.runOnClient(c -> {
                 BlockPos origin = new BlockPos(0, Y, 0);
                 AreaSelection area = new AreaSelection();
-                area.setName("swap test");
+                area.setName("substitutes test");
                 area.addSubRegionBox(new Box(origin, new BlockPos(5, Y, 0), "row"), false);
                 LitematicaSchematic schematic = LitematicaSchematic.createEmptySchematic(area, "test");
                 LitematicaBlockStateContainer row = schematic.getSubRegionContainer("row");
                 for (int x = 0; x <= 5; x++) {
                     row.set(x, 0, 0, x == 1 || x == 3 ? stair : Blocks.STONE_BRICKS.defaultBlockState());
                 }
-                SchematicPlacement placement = SchematicPlacement.createFor(schematic, origin, "swap test", true, true);
+                SchematicPlacement placement = SchematicPlacement.createFor(schematic, origin, "substitutes test", true, true);
                 DataManager.getSchematicPlacementManager().addSchematicPlacement(placement, false);
 
                 // One profile: deepslate bricks and stone bricks in one group, cobblestone and deepslate
@@ -86,7 +86,7 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                 Substitutions.INSTANCE.newProfile("Glass").setGroup(null, java.util.Set.of(Blocks.GLASS, Blocks.TINTED_GLASS));
                 Substitutions.INSTANCE.setOn(placement, true);
             });
-            // Built: a swap, a swapped stair the right way, a swapped stair the wrong way, and a wrong block.
+            // Built: a substitute, a substitute stair the right way, a substitute stair the wrong way, and a wrong block.
             server.runCommand("setblock 0 " + Y + " 0 deepslate_bricks");
             server.runCommand("setblock 1 " + Y + " 0 deepslate_brick_stairs[facing=east]");
             server.runCommand("setblock 2 " + Y + " 0 cobblestone");
@@ -108,13 +108,13 @@ public class SubstitutionGameTest implements FabricClientGameTest {
 
             // Friends of friends: the cobblestone group joined the stone bricks one, so cobblestone
             // counts for stone bricks too; the profile has two groups, not three.
-            String links = context.computeOnClient(c -> ""
+            String groups = context.computeOnClient(c -> ""
                     + Substitutions.matches(0, Y, 0, Blocks.DEEPSLATE_BRICKS.defaultBlockState(), Blocks.STONE_BRICKS.defaultBlockState())
                     + " " + Substitutions.matches(0, Y, 0, Blocks.STONE_BRICKS.defaultBlockState(), Blocks.COBBLESTONE.defaultBlockState())
                     + " " + Substitutions.matches(0, Y, 0, Blocks.GLASS.defaultBlockState(), Blocks.TINTED_GLASS.defaultBlockState())
                     + " " + Substitutions.INSTANCE.getProfiles().get(0).getGroups().size());
-            LOG.info("deepslate<-stone, stone<-cobble, glass<-tinted, test groups: {} (want true true true 2)", links);
-            if (!links.equals("true true true 2")) throw new AssertionError("friends of friends: " + links);
+            LOG.info("deepslate<-stone, stone<-cobble, glass<-tinted, test groups: {} (want true true true 2)", groups);
+            if (!groups.equals("true true true 2")) throw new AssertionError("friends of friends: " + groups);
             // The glass profile left out of this placement: glass no longer counts, stone still does.
             context.runOnClient(c -> {
                 Substitutions.INSTANCE.choiceFor(placement()).getOff().add(Substitutions.INSTANCE.getProfiles().get(1).getId());
@@ -162,21 +162,21 @@ public class SubstitutionGameTest implements FabricClientGameTest {
             LOG.info("Easy Place put down: {}", placed);
             if (!placed.equals(Blocks.DEEPSLATE_BRICKS + " " + Blocks.DEEPSLATE_BRICKS)) throw new AssertionError("Easy Place put down " + placed);
 
-            // Swaps off: the swap is wrong again.
+            // Substitutes off: the substitute is wrong again.
             context.runOnClient(c -> Substitutions.INSTANCE.setOn(placement(), false));
             boolean stillMatches = context.computeOnClient(c ->
                     Substitutions.matches(0, Y, 0, Blocks.STONE_BRICKS.defaultBlockState(), c.level.getBlockState(new BlockPos(0, Y, 0))));
-            LOG.info("with swaps off, x 0 still matches: {}", stillMatches);
-            if (stillMatches) throw new AssertionError("a swap still counted with swaps off");
+            LOG.info("with substitutes off, x 0 still matches: {}", stillMatches);
+            if (stillMatches) throw new AssertionError("a substitute still counted with substitutes off");
 
             context.runOnClient(c -> Substitutions.INSTANCE.setOn(placement(), true));
             server.runCommand("tp @a 2.5 " + (Y + 2) + " -3.5 0 35");
             context.waitTicks(40);
-            context.takeScreenshot("swaps-overlay");
-            // The settings: the swaps screen and the block picker.
+            context.takeScreenshot("substitutes-overlay");
+            // The settings: the substitutes screen and the block picker.
             context.setScreen(() -> new com.skystormer.aboutfaceeasyplace.gui.SubstitutionsScreen(null));
             context.waitTicks(5);
-            context.takeScreenshot("swaps-screen");
+            context.takeScreenshot("substitutes-screen");
             context.setScreen(() -> new com.skystormer.aboutfaceeasyplace.gui.ProfileScreen(null, Substitutions.INSTANCE.getProfiles().get(0)));
             context.waitTicks(5);
             context.takeScreenshot("profile-screen");
@@ -185,7 +185,7 @@ public class SubstitutionGameTest implements FabricClientGameTest {
                     java.util.Set.of(Blocks.STONE_BRICKS, Blocks.COBBLESTONE),
                     net.minecraft.network.chat.Component.translatable("gui.aboutfaceeasyplace.save"), picked -> kotlin.Unit.INSTANCE));
             context.waitTicks(5);
-            context.takeScreenshot("swaps-picker");
+            context.takeScreenshot("substitutes-picker");
             context.setScreen(() -> new fi.dy.masa.litematica.gui.GuiPlacementConfiguration(placement()));
             context.runOnClient(c -> c.gui.toastManager().clear());
             context.waitTicks(5);
@@ -197,7 +197,7 @@ public class SubstitutionGameTest implements FabricClientGameTest {
 
     private static SchematicPlacement placement() {
         return DataManager.getSchematicPlacementManager().getAllSchematicsPlacements().stream()
-                .filter(p -> p.getName().equals("swap test")).findFirst().orElseThrow();
+                .filter(p -> p.getName().equals("substitutes test")).findFirst().orElseThrow();
     }
 
     /** Stands in front of x, looks at it and asks Litematica's Easy Place to place there. */

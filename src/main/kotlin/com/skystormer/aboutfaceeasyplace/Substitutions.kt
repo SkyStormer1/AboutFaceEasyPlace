@@ -43,8 +43,8 @@ import java.nio.file.Path
  * the same space, so in a group of bricks and stairs, only a stair is a substitute for a stair.
  *
  * Kept in `config/aboutfaceeasyplace-substitutions.json`. Litematica's chunk builder threads ask
- * [shown] for every block they draw, so what they read is an unchanging snapshot ([areas]), swapped
- * whole on the client thread.
+ * [shown] for every block they draw, so what they read is an unchanging snapshot ([areas]),
+ * replaced whole on the client thread.
  */
 object Substitutions {
 
@@ -59,8 +59,7 @@ object Substitutions {
          * any other group sharing a block with it joins it. Fewer than two blocks takes the group away.
          */
         fun setGroup(index: Int?, blocks: Set<Block>) {
-            var at = index ?: groups.size
-            if (index != null && index in groups.indices) groups.removeAt(index) else at = groups.size
+            val at = if (index != null && index in groups.indices) index.also { groups.removeAt(it) } else groups.size
             if (blocks.size < 2) return
             val merged = LinkedHashSet(blocks)
             val iterator = groups.listIterator()
@@ -81,13 +80,13 @@ object Substitutions {
     /** What a placement has chosen: whether substitutes apply in it, and which profiles (by id) it leaves out. */
     data class PlacementChoice(var on: Boolean = false, val off: MutableSet<String> = HashSet())
 
-    /** A placement with substitutes on, as a box and each block's substitutes there, for the chunk builder threads. */
-    private class Area(
-        val minX: Int, val minY: Int, val minZ: Int, val maxX: Int, val maxY: Int, val maxZ: Int,
-        val substitutes: Map<Block, Set<Block>>,
-    ) {
+    /** A placement's box, corner to corner. */
+    private class Bounds(val minX: Int, val minY: Int, val minZ: Int, val maxX: Int, val maxY: Int, val maxZ: Int) {
         fun contains(x: Int, y: Int, z: Int) = x in minX..maxX && y in minY..maxY && z in minZ..maxZ
     }
+
+    /** A placement with substitutes on, as a box and each block's substitutes there, for the chunk builder threads. */
+    private class Area(val box: Bounds, val substitutes: Map<Block, Set<Block>>)
 
     /** The profiles, in the order they were made. */
     val profiles: MutableList<Profile> = ArrayList()
@@ -123,21 +122,21 @@ object Substitutions {
     @JvmStatic
     fun matches(x: Int, y: Int, z: Int, schematic: BlockState, client: BlockState): Boolean {
         if (schematic === client || schematic.isAir || client.isAir || schematic.block === client.block) return false
-        val area = areas.firstOrNull { it.contains(x, y, z) } ?: return false
+        val area = areas.firstOrNull { it.box.contains(x, y, z) } ?: return false
         val substitutes = area.substitutes[schematic.block] ?: return false
         return client.block in substitutes && shapesAgree(schematic, client) && sameShape(schematic, client)
     }
 
-    /** What Litematica should take the schematic to hold at [pos], with [client] there: the swap when it [matches]. */
+    /** What Litematica should take the schematic to hold at [pos], with [client] there: [client] when it [matches]. */
     @JvmStatic
     fun shown(pos: BlockPos, schematic: BlockState, client: BlockState): BlockState =
         if (matches(pos.x, pos.y, pos.z, schematic, client)) client else schematic
 
     /**
      * The block Easy Place should put at [pos], where the schematic has [schematic]: what is
-     * already there when it is an allowed swap (so Easy Place leaves it alone); else, where the
-     * spot is free, the block in your hand when it is the schematic's or an allowed swap, then the
-     * schematic's when you have it, then the first swap you have; else the schematic's.
+     * already there when it is an allowed substitute (so Easy Place leaves it alone); else, where the
+     * spot is free, the block in your hand when it is the schematic's or an allowed substitute, then
+     * the schematic's when you have it, then the first substitute you have; else the schematic's.
      */
     @JvmStatic
     fun toPlace(pos: BlockPos, schematic: BlockState): BlockState {
@@ -148,15 +147,15 @@ object Substitutions {
         val allowed = allowedAt(pos, schematic).ifEmpty { return schematic }
         val held = (player.mainHandItem.item as? BlockItem)?.block
         if (held === schematic.block) return schematic
-        if (held != null && held in allowed) return swapped(schematic, held)
+        if (held != null && held in allowed) return substituted(schematic, held)
         if (has(player, schematic.block)) return schematic
         val have = allowed.firstOrNull { has(player, it) } ?: return schematic
-        return swapped(schematic, have)
+        return substituted(schematic, have)
     }
 
     /**
      * The schematic as this mod's own planning sees it: like [shown], and where nothing is there
-     * yet, the swap in your hand, so the block you are about to place is the one it lines up.
+     * yet, the substitute in your hand, so the block you are about to place is the one it lines up.
      */
     fun planningView(schematic: BlockGetter): BlockGetter = object : BlockGetter {
         override fun getBlockState(pos: BlockPos): BlockState {
@@ -166,7 +165,7 @@ object Substitutions {
             val client = minecraft.level?.getBlockState(pos) ?: return state
             if (matches(pos.x, pos.y, pos.z, state, client)) return client
             val held = (minecraft.player?.mainHandItem?.item as? BlockItem)?.block ?: return state
-            return if (held !== state.block && held in allowedAt(pos, state)) swapped(state, held) else state
+            return if (held !== state.block && held in allowedAt(pos, state)) substituted(state, held) else state
         }
 
         override fun getBlockEntity(pos: BlockPos): BlockEntity? = schematic.getBlockEntity(pos)
@@ -176,13 +175,13 @@ object Substitutions {
     }
 
     /**
-     * The substitutes for [state] at [pos], each the same shape once swapped: none where no
+     * The substitutes for [state] at [pos], each the same shape once put in: none where no
      * placement with substitutes on covers it.
      */
     private fun allowedAt(pos: BlockPos, state: BlockState): List<Block> {
-        val area = areas.firstOrNull { it.contains(pos.x, pos.y, pos.z) } ?: return emptyList()
+        val area = areas.firstOrNull { it.box.contains(pos.x, pos.y, pos.z) } ?: return emptyList()
         val substitutes = area.substitutes[state.block] ?: return emptyList()
-        return substitutes.filter { sameShape(state, swapped(state, it)) }
+        return substitutes.filter { sameShape(state, substituted(state, it)) }
     }
 
     /** Whether the two take up the same space: a full block for a full block, a stair for a stair facing the same way. */
@@ -199,8 +198,7 @@ object Substitutions {
     }
 
     /** [state]'s shape on [block]: each property they share set the same, the rest as [block] comes. */
-    @JvmStatic
-    fun swapped(state: BlockState, block: Block): BlockState {
+    private fun substituted(state: BlockState, block: Block): BlockState {
         var out = block.defaultBlockState()
         for (property in block.stateDefinition.properties) {
             val same = state.block.stateDefinition.getProperty(property.name) ?: continue
@@ -267,7 +265,7 @@ object Substitutions {
                 val choice = choices[keyOf(placement)] ?: continue
                 if (!choice.on) continue
                 val table = tables.getOrPut(choice.off.toSet()) { substitutesTable(choice.off) }
-                boxesOf(placement).forEach { out += Area(it.minX, it.minY, it.minZ, it.maxX, it.maxY, it.maxZ, table) }
+                boxesOf(placement).forEach { out += Area(it, table) }
             }
             areas = out
         } catch (e: LinkageError) {
@@ -301,10 +299,6 @@ object Substitutions {
         Log.error("block substitutes could not read Litematica's placements, so they are off for this session", e)
     }
 
-    private class Bounds(val minX: Int, val minY: Int, val minZ: Int, val maxX: Int, val maxY: Int, val maxZ: Int) {
-        fun contains(x: Int, y: Int, z: Int) = x in minX..maxX && y in minY..maxY && z in minZ..maxZ
-    }
-
     private fun boxesOf(placement: SchematicPlacement): List<Bounds> =
         placement.getSubRegionBoxes(SubRegionPlacement.RequiredEnabled.PLACEMENT_ENABLED).values.mapNotNull { box ->
             val a = box.pos1 ?: return@mapNotNull null
@@ -330,7 +324,7 @@ object Substitutions {
 
     // ---- Saving ----
 
-    fun idOf(block: Block): String = BuiltInRegistries.BLOCK.getKey(block).toString()
+    private fun idOf(block: Block): String = BuiltInRegistries.BLOCK.getKey(block).toString()
 
     private fun blockOf(id: String): Block? =
         Identifier.tryParse(id)?.let { BuiltInRegistries.BLOCK.getOptional(it).orElse(null) }
@@ -348,17 +342,9 @@ object Substitutions {
             json.getAsJsonArray("profiles")?.forEach { e ->
                 val o = e.asJsonObject
                 val profile = Profile(o.get("id").asString, o.get("name")?.asString ?: "Profile")
-                o.getAsJsonArray("groups")?.forEach { group -> profile.setGroup(null, blocksOf(group)) }
+                o.getAsJsonArray("groups")?.forEach { group -> profile.setGroup(null, blocksOf(group.asJsonArray)) }
                 profiles += profile
             }
-            // Earlier test builds kept two-way links, or one-way swaps: they become one profile's groups.
-            val pairs = ArrayList<Set<Block>>()
-            json.getAsJsonArray("links")?.forEach { pairs += blocksOf(it) }
-            json.getAsJsonArray("swaps")?.forEach { e ->
-                val o = e.asJsonObject
-                pairs += blocksOf(o.get("from")) + blocksOf(o.get("to"))
-            }
-            if (pairs.isNotEmpty()) newProfile("My substitutes").also { profile -> pairs.forEach { profile.setGroup(null, it) } }
             json.getAsJsonObject("placements")?.entrySet()?.forEach { (key, value) ->
                 val o = value.asJsonObject
                 choices[key] = PlacementChoice(
@@ -381,12 +367,8 @@ object Substitutions {
         }
     }
 
-    /** A list of block ids (or one, as the first version wrote) as blocks, leaving out any this game does not have. */
-    private fun blocksOf(element: com.google.gson.JsonElement?): Set<Block> = when {
-        element == null -> emptySet()
-        element.isJsonArray -> element.asJsonArray.mapNotNullTo(LinkedHashSet()) { blockOf(it.asString) }
-        else -> setOfNotNull(blockOf(element.asString))
-    }
+    /** A list of block ids as blocks, leaving out any this game does not have. */
+    private fun blocksOf(array: JsonArray): Set<Block> = array.mapNotNullTo(LinkedHashSet()) { blockOf(it.asString) }
 
     fun save() {
         val path = file

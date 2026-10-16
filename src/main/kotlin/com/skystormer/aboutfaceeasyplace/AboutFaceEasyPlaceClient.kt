@@ -28,7 +28,7 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
         private set
 
     /** Switches block substitution on or off in the selected placement ([Substitutions]). Starts unbound. */
-    lateinit var swapsKey: KeyMapping
+    lateinit var substitutesKey: KeyMapping
         private set
 
     override fun onInitializeClient() {
@@ -41,7 +41,7 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
 
         val category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"))
         toggleKey = KeyMappingHelper.registerKeyMapping(KeyMapping("key.$MOD_ID.toggle", InputConstants.UNKNOWN.value, category))
-        swapsKey = KeyMappingHelper.registerKeyMapping(KeyMapping("key.$MOD_ID.toggle_swaps", InputConstants.UNKNOWN.value, category))
+        substitutesKey = KeyMappingHelper.registerKeyMapping(KeyMapping("key.$MOD_ID.toggle_substitutes", InputConstants.UNKNOWN.value, category))
 
         ClientTickEvents.END_CLIENT_TICK.register { client -> onTick(client) }
     }
@@ -83,17 +83,17 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
             Messages.toggled(Config.enabled)
         }
 
-        var swapToggles = 0
-        while (swapsKey.consumeClick()) swapToggles++
-        if (swapToggles % 2 == 1) {
+        var substituteToggles = 0
+        while (substitutesKey.consumeClick()) substituteToggles++
+        if (substituteToggles % 2 == 1) {
             val placement = Substitutions.currentPlacement()
             if (placement == null) {
-                Messages.swapsNoPlacement()
+                Messages.substitutesNoPlacement()
             } else {
                 val on = !Substitutions.choiceFor(placement).on
                 Substitutions.setOn(placement, on)
                 Log.info("block substitution {} in {} by keybind", if (on) "on" else "off", placement.name)
-                Messages.swapsToggled(placement.name, on)
+                Messages.substitutesToggled(placement.name, on)
             }
         }
     }

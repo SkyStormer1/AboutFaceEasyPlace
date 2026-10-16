@@ -41,12 +41,12 @@ object Messages {
         )
 
     /** Always shown: the answer to the block substitution key, for the placement it switched. */
-    fun swapsToggled(placement: String, on: Boolean) =
-        say("swaps", Component.translatable(key(if (on) "swaps_on" else "swaps_off"), placement), force = true)
+    fun substitutesToggled(placement: String, on: Boolean) =
+        say("substitutes", Component.translatable(key(if (on) "substitutes_on" else "substitutes_off"), placement), force = true)
 
     /** The block substitution key was pressed with no placement selected or around you. */
-    fun swapsNoPlacement() =
-        say("swaps", Component.translatable(key("swaps_no_placement")), force = true)
+    fun substitutesNoPlacement() =
+        say("substitutes", Component.translatable(key("substitutes_no_placement")), force = true)
 
     /** Tweakeroo's Accurate Block Placement is on; see [Tweakeroo]. Said once a session. */
     fun tweakerooFighting() =
