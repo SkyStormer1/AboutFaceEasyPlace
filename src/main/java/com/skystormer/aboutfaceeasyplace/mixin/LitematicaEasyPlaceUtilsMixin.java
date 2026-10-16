@@ -55,7 +55,7 @@ public abstract class LitematicaEasyPlaceUtilsMixin {
     }
 
     @ModifyVariable(method = "handleEasyPlace", at = @At(value = "STORE", ordinal = 0), ordinal = 0, require = 0)
-    private static BlockState aboutFaceEasyPlace$placeSwaps(BlockState stateSchematic, @Local(ordinal = 0) BlockPos targetBlockPos) {
+    private static BlockState aboutFaceEasyPlace$placeSubstitutes(BlockState stateSchematic, @Local(ordinal = 0) BlockPos targetBlockPos) {
         return Substitutions.toPlace(targetBlockPos, stateSchematic);
     }
 }

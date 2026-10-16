@@ -26,7 +26,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class LitematicaPlacementScreenMixin {
 
     @Inject(method = "initGui", at = @At("TAIL"), require = 0)
-    private void aboutFaceEasyPlace$addSwapsButtons(CallbackInfo ci) {
+    private void aboutFaceEasyPlace$addSubstitutesButtons(CallbackInfo ci) {
         GuiPlacementConfiguration gui = (GuiPlacementConfiguration) (Object) this;
         SchematicPlacement placement = gui.placement;
         int width = 120;
@@ -42,9 +42,9 @@ public abstract class LitematicaPlacementScreenMixin {
             toggle.updateDisplayString(on);
         });
 
-        ButtonGeneric links = new ButtonGeneric(x + width - 20, y, 20, 20, "…",
+        ButtonGeneric profilesButton = new ButtonGeneric(x + width - 20, y, 20, 20, "…",
                 Component.translatable("gui.aboutfaceeasyplace.profiles_button.tip").getString());
-        gui.addButton(links, (button, mouseButton) ->
+        gui.addButton(profilesButton, (button, mouseButton) ->
                 Minecraft.getInstance().gui.setScreen(new PlacementProfilesScreen((Screen) (Object) gui, placement)));
     }
 }

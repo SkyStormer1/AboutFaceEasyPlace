@@ -12,8 +12,8 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 
 /**
- * Litematica's schematic renderer draws an allowed swap as finished (see {@link Substitutions}):
- * where the block there is a swap for the schematic's, the schematic is read as holding that very
+ * Litematica's schematic renderer draws an allowed substitute as finished (see {@link Substitutions}):
+ * where the block there is a substitute for the schematic's, the schematic is read as holding that very
  * block, so no ghost block and no wrong-block overlay is drawn on it, nor on its neighbours' sides.
  *
  * Runs on Litematica's chunk builder threads, which is why {@link Substitutions} answers from a
@@ -31,9 +31,9 @@ public abstract class LitematicaChunkRendererMixin {
             at = @At(value = "INVOKE", target = "Lfi/dy/masa/litematica/render/schematic/ChunkCacheSchematic;getBlockState(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;"),
             require = 0
     )
-    private BlockState aboutFaceEasyPlace$swapsLookFinished(ChunkCacheSchematic view, BlockPos pos, Operation<BlockState> original) {
+    private BlockState aboutFaceEasyPlace$substitutesLookFinished(ChunkCacheSchematic view, BlockPos pos, Operation<BlockState> original) {
         BlockState state = original.call(view, pos);
-        // The client world's own reads go through untouched; only the schematic's are swapped.
+        // The client world's own reads go through untouched; only the schematic's are substituted.
         if (view == this.clientWorldView || state.isAir()) {
             return state;
         }

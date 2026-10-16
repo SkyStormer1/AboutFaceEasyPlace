@@ -110,7 +110,7 @@ object Litematica {
 
     /**
      * The schematic world, or null when no schematic is loaded: as this mod's planning should see
-     * it, with block substitution's swaps in ([Substitutions.planningView]).
+     * it, with block substitutes in ([Substitutions.planningView]).
      */
     fun schematicWorld(): BlockGetter? = (invoke(schematicWorldMethod) as? BlockGetter)?.let(Substitutions::planningView)
 

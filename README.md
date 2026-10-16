@@ -69,6 +69,8 @@ camera never moves.
 - **No containers opened by accident.** A click that would open a dropper or chest underneath a
   small schematic block places the block instead, and holding the key does not undo a door or
   repeater that has just been set.
+- **Block substitutes** — let other blocks be built in place of a schematic's (any glass for glass, deepslate
+  for stone) and still pass the verifier. See [Block substitutes](#block-substitutes).
 
 Candidates are tried by asking the block itself what it would place — the same question the server
 answers — so anything that cannot be made right is **skipped rather than placed wrongly**, and
@@ -149,7 +151,7 @@ place of the schematic's: **Block substitutes…** in the settings.
   is there to start with.
 - **Groups** — a profile is a list of groups, picked in a block grid: every block in a group is a
   substitute for every other. Friends of friends count: put a block that is already in another
-  group into a new one and the two join.
+  group into a new one and the two join. Click and drag across the grid to pick many at once.
 - **Per placement** — in Litematica's own settings for a placement (Schematic Placements →
   Configure), **Substitutes** at the top right switches them on (off until you do), and **…** picks
   which profiles that placement uses. The same is on the Block substitutes screen for every
@@ -170,7 +172,8 @@ Requires **JDK 25** or newer.
 ./gradlew build      # jar lands in build/libs/
 ```
 
-Litematica is reached by reflection and by name, so no Litematica jar is needed to build.
+Litematica and malilib are fetched from CurseMaven at build time, for compiling only; they are not
+bundled in the jar.
 
 ---
 

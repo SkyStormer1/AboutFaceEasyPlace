@@ -10,7 +10,7 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * The schematic verifier counts an allowed swap as the right block (see {@link Substitutions}): the
+ * The schematic verifier counts an allowed substitute as the right block (see {@link Substitutions}): the
  * check is made again as if the schematic had asked for exactly what is there.
  *
  * Optional, like every substitution hook: a Litematica without this method just verifies as it
@@ -25,7 +25,7 @@ public abstract class LitematicaVerifierMixin {
     }
 
     @Inject(method = "checkBlockStates", at = @At("HEAD"), cancellable = true, require = 0)
-    private void aboutFaceEasyPlace$countSwapsAsRight(int x, int y, int z, BlockState stateSchematic, BlockState stateClient, CallbackInfo ci) {
+    private void aboutFaceEasyPlace$countSubstitutesAsRight(int x, int y, int z, BlockState stateSchematic, BlockState stateClient, CallbackInfo ci) {
         if (Substitutions.matches(x, y, z, stateSchematic, stateClient)) {
             ci.cancel();
             this.checkBlockStates(x, y, z, stateClient, stateClient);
