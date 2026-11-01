@@ -112,7 +112,10 @@ object Litematica {
      * The schematic world, or null when no schematic is loaded: as this mod's planning should see
      * it, with block substitutes in ([Substitutions.planningView]).
      */
-    fun schematicWorld(): BlockGetter? = (invoke(schematicWorldMethod) as? BlockGetter)?.let(Substitutions::planningView)
+    fun schematicWorld(): BlockGetter? = schematicAsItIs()?.let(Substitutions::planningView)
+
+    /** The schematic world as Litematica has it, with no substitutes in; null when no schematic is loaded. */
+    fun schematicAsItIs(): BlockGetter? = invoke(schematicWorldMethod) as? BlockGetter
 
     /**
      * The name of the Easy Place protocol Litematica has settled on for this server.

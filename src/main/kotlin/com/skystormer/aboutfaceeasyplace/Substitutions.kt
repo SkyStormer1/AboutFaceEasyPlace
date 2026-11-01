@@ -136,7 +136,8 @@ object Substitutions {
      * The block Easy Place should put at [pos], where the schematic has [schematic]: what is
      * already there when it is an allowed substitute (so Easy Place leaves it alone); else, where the
      * spot is free, the block in your hand when it is the schematic's or an allowed substitute, then
-     * the schematic's when you have it, then the first substitute you have; else the schematic's.
+     * the schematic's when you have it, then what [Stripping] can make it from, then the first
+     * substitute you have; else the schematic's.
      */
     @JvmStatic
     fun toPlace(pos: BlockPos, schematic: BlockState): BlockState {
@@ -144,28 +145,33 @@ object Substitutions {
         val client = minecraft.level?.getBlockState(pos) ?: return schematic
         if (matches(pos.x, pos.y, pos.z, schematic, client)) return client
         val player = minecraft.player ?: return schematic
-        val allowed = allowedAt(pos, schematic).ifEmpty { return schematic }
+        val allowed = allowedAt(pos, schematic)
         val held = (player.mainHandItem.item as? BlockItem)?.block
         if (held === schematic.block) return schematic
         if (held != null && held in allowed) return substituted(schematic, held)
         if (has(player, schematic.block)) return schematic
+        Stripping.toPlace(schematic, player)?.let { return it }
         val have = allowed.firstOrNull { has(player, it) } ?: return schematic
         return substituted(schematic, have)
     }
 
     /**
      * The schematic as this mod's own planning sees it: like [shown], and where nothing is there
-     * yet, the substitute in your hand, so the block you are about to place is the one it lines up.
+     * yet, the substitute in your hand, or what [Stripping] is making it from, so the block you are
+     * about to place is the one it lines up.
      */
     fun planningView(schematic: BlockGetter): BlockGetter = object : BlockGetter {
         override fun getBlockState(pos: BlockPos): BlockState {
             val state = schematic.getBlockState(pos)
-            if (state.isAir || areas.isEmpty()) return state
+            if (state.isAir) return state
             val minecraft = Minecraft.getInstance()
             val client = minecraft.level?.getBlockState(pos) ?: return state
             if (matches(pos.x, pos.y, pos.z, state, client)) return client
-            val held = (minecraft.player?.mainHandItem?.item as? BlockItem)?.block ?: return state
-            return if (held !== state.block && held in allowedAt(pos, state)) substituted(state, held) else state
+            val player = minecraft.player ?: return state
+            val held = (player.mainHandItem.item as? BlockItem)?.block ?: return state
+            if (held === state.block) return state
+            if (held in allowedAt(pos, state)) return substituted(state, held)
+            return Stripping.toPlace(state, player)?.takeIf { it.block === held } ?: state
         }
 
         override fun getBlockEntity(pos: BlockPos): BlockEntity? = schematic.getBlockEntity(pos)
@@ -198,7 +204,7 @@ object Substitutions {
     }
 
     /** [state]'s shape on [block]: each property they share set the same, the rest as [block] comes. */
-    private fun substituted(state: BlockState, block: Block): BlockState {
+    fun substituted(state: BlockState, block: Block): BlockState {
         var out = block.defaultBlockState()
         for (property in block.stateDefinition.properties) {
             val same = state.block.stateDefinition.getProperty(property.name) ?: continue

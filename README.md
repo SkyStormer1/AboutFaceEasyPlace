@@ -136,6 +136,7 @@ Settings are behind Mod Menu's cog, or in `config/aboutfaceeasyplace.json`:
 | **Skip blocks that cannot be aligned** | on | Off places them anyway, facing however they come out. |
 | **Show action bar messages** | on | The occasional note about a skipped block. |
 | **Log every placement** | off | One log line per steered placement, and a warning if the server disagreed with it. Worth turning on before reporting a problem. |
+| **Strip wood with your axe** | on | Where the schematic has stripped wood or logs and you have none, but do have the unstripped block and an axe, places that and strips it. Stripped blocks you already have are used first, and an axe with one use left is never used. |
 
 > [!TIP]
 > **Litematica → Generic → `placementRestriction`.** Holding right-click repeats the click, and

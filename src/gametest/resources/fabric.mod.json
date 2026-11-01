@@ -6,6 +6,6 @@
   "environment": "client",
   "entrypoints": {
     "client": ["com.skystormer.aboutfaceeasyplace.test.NotIde"],
-    "fabric-client-gametest": ["com.skystormer.aboutfaceeasyplace.test.SubstitutionGameTest"]
+    "fabric-client-gametest": ["com.skystormer.aboutfaceeasyplace.test.SubstitutionGameTest", "com.skystormer.aboutfaceeasyplace.test.AxisBlocksGameTest", "com.skystormer.aboutfaceeasyplace.test.StrippingGameTest"]
   }
 }
