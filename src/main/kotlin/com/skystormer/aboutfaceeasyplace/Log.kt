@@ -30,13 +30,9 @@ object Log {
     /** Something broke. Always written. */
     fun error(message: String, cause: Throwable) = LOGGER.error(prefix(message), cause)
 
-    /** Per-placement working, written only when [Config.verboseLogging] is on. */
-    fun detail(message: String, vararg arguments: Any?) {
-        if (!detailed) return
-        LOGGER.info(prefix(message), *arguments)
-    }
-
     /**
+     * Per-placement working, written only when [Config.verboseLogging] is on.
+     *
      * Written at `info` rather than `debug` deliberately.
      *
      * Someone who has switched verbose logging on is trying to find out why a block went down
@@ -44,5 +40,10 @@ object Log {
      * launcher before it reaches `latest.log`. Making the switch do the filtering, and the level
      * stay visible, is what makes the switch worth having.
      */
+    fun detail(message: String, vararg arguments: Any?) {
+        if (!detailed) return
+        LOGGER.info(prefix(message), *arguments)
+    }
+
     private fun prefix(message: String) = "[About Face Easy Place] $message"
 }

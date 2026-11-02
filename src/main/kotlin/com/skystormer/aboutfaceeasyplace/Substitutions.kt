@@ -25,6 +25,7 @@ import net.minecraft.world.level.material.FluidState
 import net.minecraft.world.phys.shapes.Shapes
 import java.nio.file.Files
 import java.nio.file.Path
+import java.nio.file.StandardCopyOption
 
 /**
  * Block substitutes: profiles you make ("All glass", "Stone"), each a list of groups of blocks. In a
@@ -109,8 +110,18 @@ object Substitutions {
     @Volatile
     private var areas: List<Area> = emptyList()
 
+    /** Each block's substitutes, by the profiles left out, until a profile or a choice changes. */
+    private val tables = HashMap<Set<String>, Map<Block, Set<Block>>>()
+
+    /** The blocks each item places: a sign and its wall sign. */
+    private val blocksByItem by lazy { BuiltInRegistries.BLOCK.groupBy { it.asItem() } }
+
     private var ticks = 0
     private var broken = false
+
+    /** Whether any placement has substitutes on, for Litematica's hooks to skip the rest when not. */
+    @JvmStatic
+    val active: Boolean get() = areas.isNotEmpty()
 
     // ---- What Litematica's hooks ask ----
 
@@ -145,13 +156,10 @@ object Substitutions {
         val client = minecraft.level?.getBlockState(pos) ?: return schematic
         if (matches(pos.x, pos.y, pos.z, schematic, client)) return client
         val player = minecraft.player ?: return schematic
-        val allowed = allowedAt(pos, schematic)
-        val held = (player.mainHandItem.item as? BlockItem)?.block
-        if (held === schematic.block) return schematic
-        if (held != null && held in allowed) return substituted(schematic, held)
+        heldSubstitute(pos, schematic, player)?.let { return it }
         if (has(player, schematic.block)) return schematic
         Stripping.toPlace(schematic, player)?.let { return it }
-        val have = allowed.firstOrNull { has(player, it) } ?: return schematic
+        val have = substitutesAt(pos, schematic).firstOrNull { has(player, it) && fits(schematic, it) } ?: return schematic
         return substituted(schematic, have)
     }
 
@@ -168,10 +176,9 @@ object Substitutions {
             val client = minecraft.level?.getBlockState(pos) ?: return state
             if (matches(pos.x, pos.y, pos.z, state, client)) return client
             val player = minecraft.player ?: return state
-            val held = (player.mainHandItem.item as? BlockItem)?.block ?: return state
-            if (held === state.block) return state
-            if (held in allowedAt(pos, state)) return substituted(state, held)
-            return Stripping.toPlace(state, player)?.takeIf { it.block === held } ?: state
+            return heldSubstitute(pos, state, player)
+                ?: Stripping.toPlace(state, player)?.takeIf { it.block === heldBlock(player) }
+                ?: state
         }
 
         override fun getBlockEntity(pos: BlockPos): BlockEntity? = schematic.getBlockEntity(pos)
@@ -180,14 +187,19 @@ object Substitutions {
         override fun getMinY(): Int = schematic.minY
     }
 
-    /**
-     * The substitutes for [state] at [pos], each the same shape once put in: none where no
-     * placement with substitutes on covers it.
-     */
-    private fun allowedAt(pos: BlockPos, state: BlockState): List<Block> {
-        val area = areas.firstOrNull { it.box.contains(pos.x, pos.y, pos.z) } ?: return emptyList()
-        val substitutes = area.substitutes[state.block] ?: return emptyList()
-        return substitutes.filter { sameShape(state, substituted(state, it)) }
+    /** The substitutes for [state] at [pos], whatever their shape: none where no placement with substitutes on covers it. */
+    private fun substitutesAt(pos: BlockPos, state: BlockState): Set<Block> =
+        areas.firstOrNull { it.box.contains(pos.x, pos.y, pos.z) }?.substitutes?.get(state.block).orEmpty()
+
+    /** Whether [block] is still the same shape as [state] once put in. */
+    private fun fits(state: BlockState, block: Block): Boolean = sameShape(state, substituted(state, block))
+
+    private fun heldBlock(player: Player): Block? = (player.mainHandItem.item as? BlockItem)?.block
+
+    /** [state] as the block in your hand, when that is an allowed substitute for it at [pos]. */
+    private fun heldSubstitute(pos: BlockPos, state: BlockState, player: Player): BlockState? {
+        val held = heldBlock(player) ?: return null
+        return if (held in substitutesAt(pos, state) && fits(state, held)) substituted(state, held) else null
     }
 
     /** Whether the two take up the same space: a full block for a full block, a stair for a stair facing the same way. */
@@ -213,10 +225,12 @@ object Substitutions {
         return out
     }
 
-    private fun has(player: Player, block: Block): Boolean {
+    /** Whether you have [block] to place: anywhere in the inventory or the other hand, or by being in creative. */
+    fun has(player: Player, block: Block): Boolean {
         if (player.hasInfiniteMaterials()) return true
         val inventory = player.inventory
-        return (0 until Inventory.INVENTORY_SIZE).any { (inventory.getItem(it).item as? BlockItem)?.block === block }
+        return (player.offhandItem.item as? BlockItem)?.block === block ||
+            (0 until Inventory.INVENTORY_SIZE).any { (inventory.getItem(it).item as? BlockItem)?.block === block }
     }
 
     // ---- Placements ----
@@ -251,6 +265,7 @@ object Substitutions {
     /** After a profile or a placement's choice changed: saved, the snapshot rebuilt, every placement redrawn. */
     fun changed() {
         save()
+        tables.clear()
         refresh()
         redraw()
     }
@@ -264,12 +279,11 @@ object Substitutions {
     private fun refresh() {
         try {
             val out = ArrayList<Area>()
-            // Placements leaving out the same profiles share one table.
-            val tables = HashMap<Set<String>, Map<Block, Set<Block>>>()
             for (placement in placements()) {
                 if (!placement.isEnabled) continue
                 val choice = choices[keyOf(placement)] ?: continue
                 if (!choice.on) continue
+                // Placements leaving out the same profiles share one table.
                 val table = tables.getOrPut(choice.off.toSet()) { substitutesTable(choice.off) }
                 boxesOf(placement).forEach { out += Area(it, table) }
             }
@@ -287,13 +301,12 @@ object Substitutions {
      * block grid does not list on their own.
      */
     private fun substitutesTable(off: Set<String>): Map<Block, Set<Block>> {
-        val byItem = BuiltInRegistries.BLOCK.groupBy { it.asItem() }
         val out = HashMap<Block, MutableSet<Block>>()
         for (profile in profiles) {
             if (profile.id in off) continue
             for (picked in profile.groups) {
-                val group = picked.flatMapTo(LinkedHashSet()) { block -> byItem[block.asItem()].orEmpty() + block }
-                for (block in group) out.getOrPut(block) { HashSet() } += group.filter { it !== block }
+                val group = picked.flatMapTo(LinkedHashSet()) { block -> blocksByItem[block.asItem()].orEmpty() + block }
+                for (block in group) out.getOrPut(block) { LinkedHashSet() } += group.filter { it !== block }
             }
         }
         return out
@@ -339,6 +352,7 @@ object Substitutions {
         val path = file
         profiles.clear()
         choices.clear()
+        tables.clear()
         try {
             if (Files.notExists(path)) {
                 starterProfiles()
@@ -359,7 +373,12 @@ object Substitutions {
                 )
             }
         } catch (e: Exception) {
-            Log.warn("could not read {}; starting with no substitutes. ({})", path, e.toString())
+            // Kept beside it, because the next save would otherwise write over all those profiles.
+            profiles.clear()
+            choices.clear()
+            val kept = path.resolveSibling("${path.fileName}.broken")
+            runCatching { Files.move(path, kept, StandardCopyOption.REPLACE_EXISTING) }
+            Log.warn("could not read {}; starting with no substitutes, and kept it as {}. ({})", path, kept.fileName, e.toString())
         }
     }
 
@@ -401,7 +420,10 @@ object Substitutions {
                     })
                 }
             })
-            Files.writeString(path, GSON.toJson(json))
+            // Written beside it and moved over, so a crash mid-write cannot cost the old file.
+            val temp = path.resolveSibling("${path.fileName}.tmp")
+            Files.writeString(temp, GSON.toJson(json))
+            Files.move(temp, path, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE)
         } catch (e: Exception) {
             Log.warn("could not write {}. ({})", path, e.toString())
         }

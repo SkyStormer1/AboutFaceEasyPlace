@@ -2,7 +2,6 @@ package com.skystormer.aboutfaceeasyplace.gui
 
 import com.skystormer.aboutfaceeasyplace.Substitutions
 import net.minecraft.client.gui.components.Button
-import net.minecraft.client.gui.components.CycleButton
 import net.minecraft.client.gui.components.StringWidget
 import net.minecraft.client.gui.components.Tooltip
 import net.minecraft.client.gui.screens.Screen
@@ -13,7 +12,7 @@ import net.minecraft.world.level.block.Block
  * Block substitutes: your profiles, to make, open and delete, then each Litematica placement loaded
  * now, with its switch and the profiles it uses. Every change is saved and shown straight away.
  */
-class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.translatable("gui.aboutfaceeasyplace.substitutes")) {
+class SubstitutionsScreen(parent: Screen?) : SubstitutesFrame(parent, Component.translatable("gui.aboutfaceeasyplace.substitutes")) {
 
     override val resetTip: String
         get() = Component.translatable("gui.aboutfaceeasyplace.substitutes.reset").string
@@ -57,20 +56,13 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
         }
         val nameWidth = WIDTH - SWITCH - PROFILES - GAP * 2
         for (placement in placements) {
-            val choice = Substitutions.choiceFor(placement)
             val name = Button.builder(Component.literal(font.plainSubstrByWidth(placement.name, nameWidth - 8))) {}
                 .bounds(left, y, nameWidth, ROW)
                 .tooltip(Tooltip.create(Component.literal(placement.name + (placement.schematicFile?.let { "\n" + it.fileName } ?: ""))))
                 .build()
             name.active = false
             addRenderableWidget(name)
-            addRenderableWidget(
-                CycleButton.onOffBuilder(choice.on)
-                    .create(left + nameWidth + GAP, y, SWITCH, ROW, Component.translatable("gui.aboutfaceeasyplace.substitutes_short")) { _, on ->
-                        Substitutions.setOn(placement, on)
-                    }
-                    .also { it.setTooltip(Tooltip.create(Component.translatable("gui.aboutfaceeasyplace.switch.tip"))) }
-            )
+            addPlacementSwitch(left + nameWidth + GAP, y, SWITCH, Component.translatable("gui.aboutfaceeasyplace.substitutes_short"), placement)
             addRenderableWidget(Button.builder(Component.translatable("gui.aboutfaceeasyplace.profiles_button")) {
                 minecraft.gui.setScreen(PlacementProfilesScreen(this, placement))
             }
@@ -86,14 +78,7 @@ class SubstitutionsScreen(private val parent: Screen?) : FramedScreen(Component.
         return y + font.lineHeight + GAP * 2
     }
 
-    override fun onClose() {
-        minecraft.gui.setScreen(parent)
-    }
-
     companion object {
-        private const val WIDTH = 300
-        private const val ROW = 20
-        private const val GAP = 2
         private const val SWITCH = 96
         private const val PROFILES = 70
 

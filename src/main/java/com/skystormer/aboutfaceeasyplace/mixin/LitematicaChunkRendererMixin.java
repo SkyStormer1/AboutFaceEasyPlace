@@ -34,7 +34,7 @@ public abstract class LitematicaChunkRendererMixin {
     private BlockState aboutFaceEasyPlace$substitutesLookFinished(ChunkCacheSchematic view, BlockPos pos, Operation<BlockState> original) {
         BlockState state = original.call(view, pos);
         // The client world's own reads go through untouched; only the schematic's are substituted.
-        if (view == this.clientWorldView || state.isAir()) {
+        if (view == this.clientWorldView || state.isAir() || !Substitutions.getActive()) {
             return state;
         }
         return Substitutions.shown(pos, state, this.clientWorldView.getBlockState(pos));

@@ -18,26 +18,17 @@ object Tweakeroo {
     private var warned = false
 
     private val accuratePlacement: Pair<Any, java.lang.reflect.Method>? by lazy {
-        try {
+        reflecting {
             val toggle = Class.forName(FEATURE_TOGGLE, false, javaClass.classLoader)
                 .getField("TWEAK_ACCURATE_BLOCK_PLACEMENT").get(null)
             toggle to toggle.javaClass.getMethod("getBooleanValue")
-        } catch (e: ReflectiveOperationException) {
-            null
-        } catch (e: LinkageError) {
-            null
         }
     }
 
     fun warnIfFighting() {
         if (warned) return
         val (toggle, getter) = accuratePlacement ?: return
-        val on = try {
-            getter.invoke(toggle) == true
-        } catch (e: ReflectiveOperationException) {
-            false
-        }
-        if (!on) return
+        if (reflecting { getter.invoke(toggle) == true } != true) return
         warned = true
         Log.warn(
             "Tweakeroo's Accurate Block Placement is on. It sends its own rotation with every " +

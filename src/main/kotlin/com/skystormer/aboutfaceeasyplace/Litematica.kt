@@ -4,6 +4,21 @@ import net.minecraft.world.level.BlockGetter
 import java.lang.reflect.Method
 
 /**
+ * [block], or null if what it reaches for by reflection is not there or does not work; [onFailure]
+ * hears why.
+ */
+internal inline fun <T> reflecting(onFailure: (Throwable) -> Unit = {}, block: () -> T): T? =
+    try {
+        block()
+    } catch (e: ReflectiveOperationException) {
+        onFailure(e)
+        null
+    } catch (e: LinkageError) {
+        onFailure(e)
+        null
+    }
+
+/**
  * Every question this mod asks Litematica: is it placing a block right now, what does the schematic
  * say should be there, is its own orientation protocol already being honoured by the server, is
  * Easy Place switched on, and is its key held. (Where it reaches into Litematica instead of asking:
@@ -136,15 +151,10 @@ object Litematica {
      */
     fun easyPlaceActive(): Boolean {
         if (easyPlaceSettingBroken) return false
-        val setting = easyPlaceSetting ?: return false
-        return try {
-            if (setting.second.invoke(setting.first) != true) return false
-            val mode = toolModeMethod?.invoke(null) as? Enum<*>
-            mode?.name != "REBUILD"
-        } catch (e: ReflectiveOperationException) {
-            easyPlaceSettingBroken = true
-            false
-        }
+        val (value, enabled) = easyPlaceSetting ?: return false
+        return reflecting({ easyPlaceSettingBroken = true }) {
+            enabled.invoke(value) == true && (toolModeMethod?.invoke(null) as? Enum<*>)?.name != "REBUILD"
+        } ?: false
     }
 
     /**
@@ -155,64 +165,34 @@ object Litematica {
      */
     fun easyPlaceKeyHeld(): Boolean? {
         val (keybind, held) = easyPlaceKey ?: return null
-        return try {
-            held.invoke(keybind) == true
-        } catch (e: ReflectiveOperationException) {
-            null
-        }
+        return reflecting { held.invoke(keybind) == true }
     }
 
     private val easyPlaceKey: Pair<Any, Method>? by lazy {
-        try {
+        reflecting({ Log.info("could not read Litematica's Easy Place key ({}); going by the use key instead", it.toString()) }) {
             val hotkey = Class.forName(HOTKEYS, false, javaClass.classLoader).getField("EASY_PLACE_ACTIVATION").get(null)
             val keybind = hotkey.javaClass.getMethod("getKeybind").invoke(hotkey)
             keybind to keybind.javaClass.getMethod("isKeybindHeld").also { it.isAccessible = true }
-        } catch (e: ReflectiveOperationException) {
-            Log.info("could not read Litematica's Easy Place key ({}); going by the use key instead", e.toString())
-            null
-        } catch (e: LinkageError) {
-            null
         }
     }
 
     private var easyPlaceSettingBroken = false
 
     private val easyPlaceSetting: Pair<Any, Method>? by lazy {
-        try {
-            val value = Class.forName(GENERIC_CONFIGS, false, javaClass.classLoader)
-                .getField("EASY_PLACE_MODE").get(null)
+        reflecting({ Log.info("could not read Litematica's easyPlaceMode setting ({}); only Litematica's own placements will be aligned", it.toString()) }) {
+            val value = Class.forName(GENERIC_CONFIGS, false, javaClass.classLoader).getField("EASY_PLACE_MODE").get(null)
             value to value.javaClass.getMethod("getBooleanValue")
-        } catch (e: ReflectiveOperationException) {
-            Log.info(
-                "could not read Litematica's easyPlaceMode setting ({}); only Litematica's own placements will be aligned",
-                e.toString(),
-            )
-            null
-        } catch (e: LinkageError) {
-            null
         }
     }
 
-    private val toolModeMethod: Method? by lazy {
-        try {
-            Class.forName(DATA_MANAGER, false, javaClass.classLoader).getMethod("getToolMode")
-        } catch (e: ReflectiveOperationException) {
-            null
-        } catch (e: LinkageError) {
-            null
-        }
-    }
+    private val toolModeMethod: Method? by lazy { reflecting { method(DATA_MANAGER, "getToolMode") } }
 
     private val setHandlingMethod: Method? by lazy {
-        try {
-            Class.forName(EASY_PLACE_UTILS, false, javaClass.classLoader)
-                .getMethod("setHandling", Boolean::class.javaPrimitiveType)
-        } catch (e: ReflectiveOperationException) {
-            null
-        } catch (e: LinkageError) {
-            null
-        }
+        reflecting { method(EASY_PLACE_UTILS, "setHandling", Boolean::class.javaPrimitiveType!!) }
     }
+
+    private fun method(className: String, name: String, vararg parameters: Class<*>): Method =
+        Class.forName(className, false, javaClass.classLoader).getMethod(name, *parameters)
 
     /**
      * Runs [action] with Litematica's newer Easy Place believing it is already handling a click.
@@ -223,46 +203,24 @@ object Litematica {
      */
     fun <T> whileHandling(action: () -> T): T {
         val method = setHandlingMethod
-        try {
-            method?.invoke(null, true)
-        } catch (_: ReflectiveOperationException) {
-        }
+        reflecting { method?.invoke(null, true) }
         try {
             return action()
         } finally {
-            try {
-                method?.invoke(null, false)
-            } catch (_: ReflectiveOperationException) {
-            }
+            reflecting { method?.invoke(null, false) }
         }
     }
 
     private fun lookUp(className: String, methodName: String): Method? {
         if (unavailable) return null
-        return try {
-            Class.forName(className, false, javaClass.classLoader)
-                .getMethod(methodName)
-                .also { it.isAccessible = true }
-        } catch (e: ReflectiveOperationException) {
-            standDown("could not find $className#$methodName()", e)
-            null
-        } catch (e: LinkageError) {
-            standDown("could not load $className", e)
-            null
+        return reflecting({ standDown("could not find $className#$methodName()", it) }) {
+            method(className, methodName).also { it.isAccessible = true }
         }
     }
 
     private fun invoke(method: Method?): Any? {
         if (method == null || unavailable) return null
-        return try {
-            method.invoke(null)
-        } catch (e: ReflectiveOperationException) {
-            standDown("call to ${method.name}() failed", e)
-            null
-        } catch (e: LinkageError) {
-            standDown("call to ${method.name}() failed", e)
-            null
-        }
+        return reflecting({ standDown("call to ${method.name}() failed", it) }) { method.invoke(null) }
     }
 
     private fun standDown(what: String, cause: Throwable) {

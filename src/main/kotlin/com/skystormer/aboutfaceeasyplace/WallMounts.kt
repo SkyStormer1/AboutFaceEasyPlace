@@ -33,17 +33,17 @@ object WallMounts {
         if (!level.getBlockState(pos).canBeReplaced()) return
         if (!wanted.canSurvive(level, pos)) return
 
-        try {
+        // Litematica having changed shape underneath this loses nothing but this one improvement:
+        // its own behaviour carries on exactly as it would without this mod.
+        reflecting({
+            reportedFailure = true
+            Log.error("could not read Litematica's placement data; wall-mounted blocks are left to Litematica", it)
+        }) {
             val handled = handledField ?: field(data, "handled").also { handledField = it }
             val mustFail = mustFailField ?: field(data, "mustFail").also { mustFailField = it }
             if (!handled.getBoolean(data)) return
             handled.setBoolean(data, false)
             mustFail.setBoolean(data, false)
-        } catch (e: ReflectiveOperationException) {
-            // Litematica has changed shape underneath this. Nothing is lost but this one
-            // improvement: its own behaviour carries on exactly as it would without this mod.
-            reportedFailure = true
-            Log.error("could not read Litematica's placement data; wall-mounted blocks are left to Litematica", e)
         }
     }
 

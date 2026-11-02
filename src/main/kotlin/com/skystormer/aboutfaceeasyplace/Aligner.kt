@@ -256,7 +256,7 @@ object Aligner {
         }
 
         val hits = hitCandidates(player, hand, stack, original, originalUsable, targetPos, wanted, properties)
-        if (hits.isEmpty()) return Outcome.LeaveAlone(Skip.NO_CLICKS)
+        if (hits.none()) return Outcome.LeaveAlone(Skip.NO_CLICKS)
         val rotations = rotationCandidates(believed, wanted, properties)
         val baseline = if (originalUsable) Placement(original, believed, player.lastSentInput.shift()) else null
 
@@ -437,7 +437,11 @@ object Aligner {
      */
     fun alreadyThere(existing: BlockState, wanted: BlockState): Boolean =
         !existing.isAir && !existing.canBeReplaced() && existing.block === wanted.block &&
-            wanted.block.stateDefinition.properties.all { it == BlockStateProperties.WATERLOGGED || BlockStates.agree(existing, wanted, it) }
+            sameApartFrom(existing, wanted) { it == BlockStateProperties.WATERLOGGED }
+
+    /** Whether two states of [b]'s block agree on every property but those [skip] says to leave out. */
+    fun sameApartFrom(a: BlockState, b: BlockState, skip: (Property<*>) -> Boolean): Boolean =
+        b.block.stateDefinition.properties.all { skip(it) || BlockStates.agree(a, b, it) }
 
     private fun wantsDoubleSlab(wanted: BlockState): Boolean =
         wanted.block is SlabBlock && wanted.getValue(SlabBlock.TYPE) == SlabType.DOUBLE
@@ -566,7 +570,8 @@ object Aligner {
      * and the blocks that read where on the face the click landed, such as a door's hinge.
      *
      * Every candidate is put through [usable], which is what makes this safe to do blind: a click
-     * that would move the block, be rejected, or open something is never offered.
+     * that would move the block, be rejected, or open something is never offered. Worked out only as
+     * far as the search asks, because the first few usually answer it.
      */
     private fun hitCandidates(
         player: LocalPlayer,
@@ -577,24 +582,18 @@ object Aligner {
         targetPos: BlockPos,
         wanted: BlockState,
         properties: Collection<Property<*>>,
-    ): List<BlockHitResult> {
-        val candidates = ArrayList<BlockHitResult>()
-        if (originalUsable) candidates += original
+    ): Sequence<BlockHitResult> = sequence {
+        if (originalUsable) yield(original)
 
         for (face in facesFor(original.direction, wanted, properties)) {
             // The block this face would be clicked on, if it were a neighbour's face rather than
             // the target's own. Same plane, same point, same face named; only the block differs.
-            val neighbour = targetPos.relative(face.opposite)
-            for ((across, up) in FACE_POINTS) {
-                candidates += BlockHitResult(pointOnFace(neighbour, face, across, up), face, neighbour, false)
+            for (clicked in listOf(targetPos.relative(face.opposite), targetPos)) {
+                for ((across, up) in FACE_POINTS) {
+                    val hit = BlockHitResult(pointOnFace(clicked, face, across, up), face, clicked, false)
+                    if (usable(player, hand, stack, hit, targetPos)) yield(hit)
+                }
             }
-            for ((across, up) in FACE_POINTS) {
-                candidates += BlockHitResult(pointOnFace(targetPos, face, across, up), face, targetPos, false)
-            }
-        }
-
-        return candidates.filterIndexed { index, hit ->
-            (index == 0 && originalUsable) || usable(player, hand, stack, hit, targetPos)
         }
     }
 
@@ -615,9 +614,10 @@ object Aligner {
         val ordered = LinkedHashSet<Direction>()
         ordered += first
         for (property in properties) {
-            val direction = BlockStates.read(wanted, property) as? Direction ?: continue
-            ordered += direction
-            ordered += direction.opposite
+            when (val value = BlockStates.read(wanted, property)) {
+                is Direction -> ordered += listOf(value, value.opposite)
+                is Direction.Axis -> ordered += Direction.entries.filter { it.axis == value }
+            }
         }
         ordered += Direction.entries
         return ordered.toList()

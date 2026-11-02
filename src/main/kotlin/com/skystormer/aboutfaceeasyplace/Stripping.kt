@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos
 import net.minecraft.core.component.DataComponents
 import net.minecraft.core.registries.BuiltInRegistries
 import net.minecraft.resources.Identifier
-import net.minecraft.world.InteractionHand
 import net.minecraft.world.entity.player.Inventory
 import net.minecraft.world.inventory.ContainerInput
 import net.minecraft.world.item.BlockItem
@@ -14,8 +13,6 @@ import net.minecraft.world.item.ItemStack
 import net.minecraft.world.item.component.BlockTransformers
 import net.minecraft.world.level.block.Block
 import net.minecraft.world.level.block.state.BlockState
-import net.minecraft.world.phys.BlockHitResult
-import net.minecraft.world.phys.Vec3
 
 /**
  * Makes stripped wood out of the unstripped kind. Where the schematic has a stripped log or wood
@@ -75,7 +72,7 @@ object Stripping {
     fun toPlace(wanted: BlockState, player: LocalPlayer): BlockState? {
         val source = sources[wanted.block] ?: return null
         if (!Config.enabled || !Config.autoStrip || player.hasInfiniteMaterials()) return null
-        if (hasBlock(player, wanted.block) || !hasBlock(player, source) || axeSlot(player) == null) return null
+        if (Substitutions.has(player, wanted.block) || !Substitutions.has(player, source) || axeSlot(player) == null) return null
         return Substitutions.substituted(wanted, source)
     }
 
@@ -84,9 +81,10 @@ object Stripping {
         if (!Config.autoStrip) return
         val wanted = Litematica.schematicAsItIs()?.getBlockState(pos) ?: return
         val source = sources[wanted.block] ?: return
-        if ((stack.item as? BlockItem)?.block === source && expected.none { it.pos == pos }) {
-            expected += Expected(pos, source, wanted.block)
-        }
+        if ((stack.item as? BlockItem)?.block !== source || expected.any { it.pos == pos }) return
+        // Where the unstripped block is an allowed substitute it is already right, and worth no durability.
+        if (Substitutions.matches(pos.x, pos.y, pos.z, wanted, Substitutions.substituted(wanted, source))) return
+        expected += Expected(pos, source, wanted.block)
     }
 
     fun tick(minecraft: Minecraft) {
@@ -130,13 +128,10 @@ object Stripping {
         val slot = axeSlot(player) ?: return false
         val inventory = player.inventory
         val selected = inventory.selectedSlot
-        val hit = BlockHitResult(Vec3.atCenterOf(pos), player.direction.opposite, pos, false)
         // A shield in the other hand stops an axe stripping, unless the player is crouching.
         val sneak = player.lastSentInput.shift() || player.offhandItem.has(DataComponents.BLOCKS_ATTACKS)
 
-        fun click() = EasyPlaceHook.sneaking(player, connection, sneak) {
-            EasyPlaceHook.placeUnaligned(gameMode, player, InteractionHand.MAIN_HAND, hit)
-        }
+        fun click() = EasyPlaceHook.useBlock(gameMode, player, connection, pos, sneak)
 
         if (Inventory.isHotbarSlot(slot)) {
             inventory.selectedSlot = slot
@@ -161,12 +156,6 @@ object Stripping {
     private fun usableAxe(stack: ItemStack): Boolean =
         stack.get(DataComponents.BLOCK_TRANSFORMER)?.`is`(BlockTransformers.AXE) == true &&
             (!stack.isDamageableItem || stack.damageValue < stack.maxDamage - 1)
-
-    private fun hasBlock(player: LocalPlayer, block: Block): Boolean {
-        val inventory = player.inventory
-        return (0 until Inventory.INVENTORY_SIZE).any { (inventory.getItem(it).item as? BlockItem)?.block === block } ||
-            (player.offhandItem.item as? BlockItem)?.block === block
-    }
 
     fun forget() = expected.clear()
 }

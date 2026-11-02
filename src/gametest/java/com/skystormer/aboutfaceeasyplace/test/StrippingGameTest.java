@@ -1,6 +1,7 @@
 package com.skystormer.aboutfaceeasyplace.test;
 
 import com.skystormer.aboutfaceeasyplace.Stripping;
+import com.skystormer.aboutfaceeasyplace.Substitutions;
 import fi.dy.masa.litematica.data.DataManager;
 import fi.dy.masa.litematica.schematic.LitematicaSchematic;
 import fi.dy.masa.litematica.schematic.container.LitematicaBlockStateContainer;
@@ -25,6 +26,7 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Set;
 
 /**
  * Easy Place with an axe, on a dedicated server: stripped wood is made from the unstripped kind along
@@ -35,7 +37,7 @@ public class StrippingGameTest implements FabricClientGameTest {
 
     private static final Logger LOG = LoggerFactory.getLogger("StrippingGameTest");
     private static final int Y = 100;
-    private static final int ROWS = 6;
+    private static final int ROWS = 7;
 
     @Override
     public void runTest(ClientGameTestContext context) {
@@ -71,7 +73,7 @@ public class StrippingGameTest implements FabricClientGameTest {
 
         Block[] wanted = {
                 Blocks.STRIPPED_POPLAR_WOOD, Blocks.STRIPPED_OAK_LOG, Blocks.STRIPPED_CRIMSON_HYPHAE, Blocks.STRIPPED_POPLAR_WOOD,
-                Blocks.STRIPPED_OAK_WOOD, Blocks.STRIPPED_OAK_WOOD,
+                Blocks.STRIPPED_OAK_WOOD, Blocks.STRIPPED_OAK_WOOD, Blocks.STRIPPED_BIRCH_WOOD,
         };
         context.runOnClient(c -> {
             BlockPos origin = new BlockPos(0, Y, 0);
@@ -125,6 +127,19 @@ public class StrippingGameTest implements FabricClientGameTest {
         // An axe with one use left (an iron axe has 250).
         give(context, server, "give @a oak_wood 16", "give @a iron_axe[damage=249]");
         row(context, server, 5, wanted[5], false, failures);
+
+        // The unstripped block an allowed substitute: it stays as it is, and the axe is left alone.
+        context.runOnClient(c -> {
+            Substitutions.INSTANCE.getProfiles().clear();
+            Substitutions.INSTANCE.newProfile("Birch").setGroup(null, Set.of(Blocks.BIRCH_WOOD, Blocks.STRIPPED_BIRCH_WOOD));
+            Substitutions.INSTANCE.setOn(DataManager.getSchematicPlacementManager().getAllSchematicsPlacements().stream()
+                    .filter(p -> p.getName().equals("strip test")).findFirst().orElseThrow(), true);
+        });
+        give(context, server, "give @a birch_wood 16", "give @a iron_axe");
+        row(context, server, 6, Blocks.BIRCH_WOOD, true, failures);
+        int spared = context.computeOnClient(c -> damageOfFirstAxe(c.player));
+        LOG.info("axe damage with the unstripped block a substitute: {} (want 0)", spared);
+        if (spared != 0) failures.add("axe used on an allowed substitute: " + spared);
 
         failures.forEach(f -> LOG.error("FAILED: {}", f));
         if (!failures.isEmpty()) throw new AssertionError(failures.size() + " stripping failures, first: " + failures.get(0));

@@ -10,10 +10,11 @@ import net.minecraft.network.chat.Component
 
 /**
  * One profile: its name, and its groups of blocks, each a row to click and change in the block grid,
- * or remove. Every change is saved and shown straight away.
+ * or remove. Every change is saved and shown straight away, but for the name, saved on the way out
+ * rather than at every letter typed.
  */
-class ProfileScreen(private val parent: Screen?, private val profile: Substitutions.Profile) :
-    FramedScreen(Component.translatable("gui.aboutfaceeasyplace.profile_title")) {
+class ProfileScreen(parent: Screen?, private val profile: Substitutions.Profile) :
+    SubstitutesFrame(parent, Component.translatable("gui.aboutfaceeasyplace.profile_title")) {
 
     override val resetTip: String
         get() = Component.translatable("gui.aboutfaceeasyplace.profile.reset").string
@@ -30,10 +31,7 @@ class ProfileScreen(private val parent: Screen?, private val profile: Substituti
         val name = EditBox(font, left, y, WIDTH, ROW, Component.translatable("gui.aboutfaceeasyplace.profile_name"))
         name.setMaxLength(48)
         name.value = profile.name
-        name.setResponder { text ->
-            profile.name = text.ifBlank { profile.name }
-            Substitutions.save()
-        }
+        name.setResponder { text -> profile.name = text.ifBlank { profile.name } }
         addRenderableWidget(name)
         y += ROW + GAP * 4
 
@@ -71,12 +69,6 @@ class ProfileScreen(private val parent: Screen?, private val profile: Substituti
 
     override fun onClose() {
         Substitutions.save()
-        minecraft.gui.setScreen(parent)
-    }
-
-    private companion object {
-        const val WIDTH = 300
-        const val ROW = 20
-        const val GAP = 2
+        super.onClose()
     }
 }
