@@ -38,17 +38,11 @@ object Adjustments {
     /** How many uses of the block turn [placed] into [wanted]; zero when none will. */
     fun usesNeeded(placed: BlockState, wanted: BlockState): Int {
         if (placed.block !== wanted.block) return 0
-        return when (val block = wanted.block) {
+        return when (wanted.block) {
             is RepeaterBlock -> steps(placed, wanted, RepeaterBlock.DELAY, REPEATER_DELAYS)
             is NoteBlock -> steps(placed, wanted, NoteBlock.NOTE, NOTES)
-            is ComparatorBlock -> toggle(placed, wanted, ComparatorBlock.MODE)
-            is DaylightDetectorBlock -> toggle(placed, wanted, DaylightDetectorBlock.INVERTED)
-            is LeverBlock -> toggle(placed, wanted, LeverBlock.POWERED)
-            is FenceGateBlock -> toggle(placed, wanted, FenceGateBlock.OPEN)
-            is DoorBlock -> if (block.type().canOpenByHand()) toggle(placed, wanted, DoorBlock.OPEN) else 0
-            is TrapDoorBlock -> if (Placing.opensByHand(block)) toggle(placed, wanted, TrapDoorBlock.OPEN) else 0
             is RedStoneWireBlock -> dustToggle(placed, wanted)
-            else -> 0
+            else -> if (adjustable(wanted).all { BlockStates.agree(placed, wanted, it) }) 0 else 1
         }
     }
 
@@ -78,9 +72,6 @@ object Adjustments {
         is RedStoneWireBlock -> if (isDot(wanted) || isCross(wanted)) SIDES else emptyList()
         else -> emptyList()
     }
-
-    private fun <T : Comparable<T>> toggle(placed: BlockState, wanted: BlockState, property: Property<T>) =
-        if (placed.getValue(property) == wanted.getValue(property)) 0 else 1
 
     /** Uses to step an integer setting forwards, wrapping, from where it is to where it should be. */
     private fun steps(

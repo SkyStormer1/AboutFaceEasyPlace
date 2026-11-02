@@ -69,6 +69,8 @@ camera never moves.
 - **No containers opened by accident.** A click that would open a dropper or chest underneath a
   small schematic block places the block instead, and holding the key does not undo a door or
   repeater that has just been set.
+- **Block substitutes** — let other blocks be built in place of a schematic's (any glass for glass, deepslate
+  for stone) and still pass the verifier. See [Block substitutes](#block-substitutes).
 
 Candidates are tried by asking the block itself what it would place — the same question the server
 answers — so anything that cannot be made right is **skipped rather than placed wrongly**, and
@@ -106,7 +108,7 @@ into `.minecraft/mods` alongside:
 | [Fabric Loader](https://fabricmc.net/use/) | 0.19.3+ |
 | [Fabric API](https://modrinth.com/mod/fabric-api) | |
 | [Fabric Language Kotlin](https://modrinth.com/mod/fabric-language-kotlin) | |
-| **[Litematica](https://github.com/sakura-ryoko/litematica)** + **MaLiLib** | **0.28.0+ — required** |
+| **[Litematica](https://github.com/sakura-ryoko/litematica)** + **MaLiLib** | **0.29.0+ — required** |
 | [Mod Menu](https://modrinth.com/mod/modmenu) | optional, for the settings screen |
 
 In Litematica's settings, leave `easyPlaceProtocolVersion` on **Auto**. That is how Litematica tells
@@ -134,11 +136,34 @@ Settings are behind Mod Menu's cog, or in `config/aboutfaceeasyplace.json`:
 | **Skip blocks that cannot be aligned** | on | Off places them anyway, facing however they come out. |
 | **Show action bar messages** | on | The occasional note about a skipped block. |
 | **Log every placement** | off | One log line per steered placement, and a warning if the server disagreed with it. Worth turning on before reporting a problem. |
+| **Strip wood with your axe** | on | Where the schematic has stripped wood or logs and you have none, but do have the unstripped block and an axe, places that and strips it. Stripped blocks you already have are used first, and an axe with one use left is never used. |
 
 > [!TIP]
 > **Litematica → Generic → `placementRestriction`.** Holding right-click repeats the click, and
 > Litematica lets those repeats place your held block where the schematic has nothing. Turn this on
 > to stop stray end rods, banners and the like turning up off the build.
+
+### Block substitutes
+
+For redstone, or a schematic that is only there for its shape, you can let other blocks be built in
+place of the schematic's: **Block substitutes…** in the settings.
+
+- **Profiles** — make your own ("All glass", "Stone"), rename and delete them. An "All glass" one
+  is there to start with.
+- **Groups** — a profile is a list of groups, picked in a block grid: every block in a group is a
+  substitute for every other. Friends of friends count: put a block that is already in another
+  group into a new one and the two join. Click and drag across the grid to pick many at once.
+- **Per placement** — in Litematica's own settings for a placement (Schematic Placements →
+  Configure), **Substitutes** at the top right switches them on (off until you do), and **…** picks
+  which profiles that placement uses. The same is on the Block substitutes screen for every
+  placement loaded, and the switch on a keybind (unbound by default).
+
+Where substitutes are on, a substitute counts as the right block: the schematic verifier calls it
+correct, the overlay shows nothing to do, and Easy Place leaves it alone. Where nothing is placed
+yet, Easy Place puts down the block in your hand if it is the schematic's or a substitute, then the
+schematic's block if you have it, then the first substitute you have. A substitute keeps the block's
+facing and type, and only counts where it is the same shape: a stair for a stair, a slab for a slab.
+Litematica's material list still lists the schematic's blocks.
 
 ## Building
 
@@ -148,7 +173,8 @@ Requires **JDK 25** or newer.
 ./gradlew build      # jar lands in build/libs/
 ```
 
-Litematica is reached by reflection and by name, so no Litematica jar is needed to build.
+Litematica and malilib are fetched from CurseMaven at build time, for compiling only; they are not
+bundled in the jar.
 
 ---
 

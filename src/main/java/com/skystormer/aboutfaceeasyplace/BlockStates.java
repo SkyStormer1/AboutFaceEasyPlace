@@ -26,4 +26,21 @@ public final class BlockStates {
     public static boolean agree(BlockState a, BlockState b, Property<?> property) {
         return read(a, property).equals(read(b, property));
     }
+
+    /** The name of the value this state holds for {@code property}, as it is written in a block state ("north", "bottom"). */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static String valueName(BlockState state, Property<?> property) {
+        return ((Property) property).getName(state.getValue((Property) property));
+    }
+
+    /**
+     * {@code state} with {@code property} set to the value named {@code name}, for carrying a value
+     * across to another block's property of the same name; unchanged when that block's property has
+     * no such value.
+     */
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static BlockState withValueNamed(BlockState state, Property<?> property, String name) {
+        java.util.Optional<?> value = ((Property) property).getValue(name);
+        return value.isPresent() ? (BlockState) state.setValue((Property) property, (Comparable) value.get()) : state;
+    }
 }

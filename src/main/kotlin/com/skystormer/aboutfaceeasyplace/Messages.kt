@@ -27,26 +27,26 @@ object Messages {
      * The two cases read differently on purpose. A skipped block is still to do and will be
      * retried; a placed one is already down and facing the wrong way, and will not be.
      */
-    fun unaligned(wanted: BlockState, skipped: Boolean) =
-        say(
-            "unaligned:${wanted.block.descriptionId}",
-            Component.translatable(key(if (skipped) "skipped" else "unaligned"), wanted.block.name),
-        )
+    fun unaligned(wanted: BlockState, skipped: Boolean) = aboutBlock("unaligned", if (skipped) "skipped" else "unaligned", wanted)
 
     /** The wall, ceiling or floor a block mounts on is missing, so it would go on the wrong one. */
     fun unsupported(wanted: BlockState, skipped: Boolean) =
-        say(
-            "unsupported:${wanted.block.descriptionId}",
-            Component.translatable(key(if (skipped) "skipped_unsupported" else "unaligned_unsupported"), wanted.block.name),
-        )
+        aboutBlock("unsupported", if (skipped) "skipped_unsupported" else "unaligned_unsupported", wanted)
+
+    /** Always shown: the answer to the block substitution key, for the placement it switched. */
+    fun substitutesToggled(placement: String, on: Boolean) =
+        say("substitutes", Component.translatable(key(if (on) "substitutes_on" else "substitutes_off"), placement), force = true)
+
+    /** The block substitution key was pressed with no placement selected or around you. */
+    fun substitutesNoPlacement() =
+        say("substitutes", Component.translatable(key("substitutes_no_placement")), force = true)
 
     /** Tweakeroo's Accurate Block Placement is on; see [Tweakeroo]. Said once a session. */
     fun tweakerooFighting() =
         say("tweakeroo", Component.translatable(key("tweakeroo_fighting")), force = true)
 
     /** A door whose hinge the doors beside it have already decided. */
-    fun hingeBlocked(wanted: BlockState) =
-        say("hinge:${wanted.block.descriptionId}", Component.translatable(key("hinge_blocked"), wanted.block.name))
+    fun hingeBlocked(wanted: BlockState) = aboutBlock("hinge", "hinge_blocked", wanted)
 
     /**
      * Said at most once a session, by [Engagement], so it needs no help getting past the throttle —
@@ -57,6 +57,9 @@ object Messages {
         say("protocol", Component.translatable(key("protocol_negotiated"), protocol))
 
     private fun key(name: String) = "text.${AboutFaceEasyPlaceClient.MOD_ID}.$name"
+
+    private fun aboutBlock(tag: String, name: String, wanted: BlockState) =
+        say("$tag:${wanted.block.descriptionId}", Component.translatable(key(name), wanted.block.name))
 
     /**
      * @param force for feedback the player directly asked for by pressing a key, which is neither

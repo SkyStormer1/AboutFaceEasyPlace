@@ -5,8 +5,6 @@ import net.minecraft.client.multiplayer.ClientPacketListener
 import net.minecraft.client.multiplayer.MultiPlayerGameMode
 import net.minecraft.client.player.LocalPlayer
 import net.minecraft.core.BlockPos
-import net.minecraft.core.Direction
-import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
 import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket
 import net.minecraft.world.InteractionHand
 import net.minecraft.world.InteractionResult
@@ -75,6 +73,7 @@ object EasyPlaceHook {
 
         greet(initiator)
         Engagement.adviseIfProtocolNegotiated()
+        Stripping.expect(targetOf(player, hand, hit), player.getItemInHand(hand))
         if (!Engagement.shouldAlign()) {
             val wanted = wantedAt(player, hand, hit) ?: return null
             // Litematica's own protocol carries the orientation, but not what a block only gets by
@@ -153,6 +152,7 @@ object EasyPlaceHook {
             Log.detail("the schematic has {} at {}, not the held block; left to vanilla", wanted, targetPos)
             return null
         }
+        Stripping.expect(targetPos, stack)
 
         return align(gameMode, player, hand, start) ?: run {
             Log.detail("placing the held {} at {} as vanilla would; nothing to align", item, targetPos)
@@ -338,10 +338,9 @@ object EasyPlaceHook {
         player.xRot = placement.rotation.pitch
         Placing.headOverride = if (headTurned) placement.rotation.yaw else RotationHold.serverHeads(player).first()
 
-        placing = true
         try {
-            val result = sneaking(player, connection, placement.sneak) {
-                gameMode.useItemOn(player, hand, placement.hit)
+            val result = unhooked {
+                sneaking(player, connection, placement.sneak) { gameMode.useItemOn(player, hand, placement.hit) }
             }
             if (result.consumesAction()) {
                 // Made before the real rotation is sent back, because a fence gate opened by a
@@ -355,7 +354,6 @@ object EasyPlaceHook {
             PlacementAudit.expect(aligned.pos, aligned.wanted, player.level().getBlockState(aligned.pos))
             return result
         } finally {
-            placing = false
             Placing.headOverride = null
             player.yRot = realYaw
             player.xRot = realPitch
@@ -368,20 +366,44 @@ object EasyPlaceHook {
     }
 
     /**
-     * A placement made exactly as given, without the search: the vanilla click this mod redirected
-     * when the block has no orientation, or [TopUp] adding a candle to a candle.
+     * A click made exactly as given, without the search: the vanilla click this mod redirected when
+     * the block has no orientation, [TopUp] adding a candle to a candle, or [Stripping] using an axe.
      */
     fun placeUnaligned(
         gameMode: MultiPlayerGameMode,
         player: LocalPlayer,
         hand: InteractionHand,
         hit: BlockHitResult,
-    ): InteractionResult {
+    ): InteractionResult = unhooked { gameMode.useItemOn(player, hand, hit) }
+
+    /** Runs [action], whose clicks are this mod's own and not to be caught by [intercept]. */
+    private inline fun <T> unhooked(action: () -> T): T {
+        val was = placing
         placing = true
         try {
-            return gameMode.useItemOn(player, hand, hit)
+            return action()
         } finally {
-            placing = false
+            placing = was
+        }
+    }
+
+    /**
+     * Clicks the block at [pos] with the main hand, [times] times, crouching or not as [sneak] says.
+     *
+     * On a side face rather than the top: the main hand may hold something else by the time a paced
+     * use goes out, and a head clicked on top of a note block is placed there rather than tuning it.
+     */
+    fun useBlock(
+        gameMode: MultiPlayerGameMode,
+        player: LocalPlayer,
+        connection: ClientPacketListener,
+        pos: BlockPos,
+        sneak: Boolean,
+        times: Int = 1,
+    ) = unhooked {
+        sneaking(player, connection, sneak) {
+            val use = BlockHitResult(Vec3.atCenterOf(pos), player.direction.opposite, pos, false)
+            repeat(times) { gameMode.useItemOn(player, InteractionHand.MAIN_HAND, use) }
         }
     }
 
@@ -442,20 +464,8 @@ object EasyPlaceHook {
         val count = minOf(uses, Clicks.left)
         if (count == 0) return 0
 
-        val wasPlacing = placing
-        placing = true
-        try {
-            sneaking(player, connection, false) {
-                // A side face rather than the top: the main hand may hold something else by the
-                // time a paced use goes out, and a head clicked on top of a note block is placed
-                // there rather than tuning it.
-                val use = BlockHitResult(Vec3.atCenterOf(pos), player.direction.opposite, pos, false)
-                repeat(count) { gameMode.useItemOn(player, InteractionHand.MAIN_HAND, use) }
-            }
-            Clicks.used(ServerTick.latest(player))
-        } finally {
-            placing = wasPlacing
-        }
+        useBlock(gameMode, player, connection, pos, sneak = false, times = count)
+        Clicks.used(ServerTick.latest(player))
         return count
     }
 
@@ -472,7 +482,7 @@ object EasyPlaceHook {
      * crouching or not as [sneak] says — and puts both back afterwards. Costs nothing when that is
      * what the server already believes.
      */
-    private fun <T> sneaking(player: LocalPlayer, connection: ClientPacketListener, sneak: Boolean, action: () -> T): T {
+    fun <T> sneaking(player: LocalPlayer, connection: ClientPacketListener, sneak: Boolean, action: () -> T): T {
         val sent = player.lastSentInput
         if (sent.shift() == sneak) return action()
         val keys = player.input.keyPresses
@@ -490,9 +500,6 @@ object EasyPlaceHook {
     private fun isUpperHalf(state: BlockState) =
         state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF) &&
             state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.UPPER
-
-    fun rotationPacket(yaw: Float, pitch: Float, player: LocalPlayer) =
-        ServerboundMovePlayerPacket.Rot(yaw, pitch, player.onGround(), player.horizontalCollision)
 
     /** Forgets what was said about this server, for when the next one is a different one. */
     fun forget() {

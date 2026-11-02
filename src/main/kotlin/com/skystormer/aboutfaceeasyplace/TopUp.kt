@@ -30,9 +30,6 @@ import net.minecraft.world.phys.Vec3
  */
 object TopUp {
 
-    /** Ticks between clicks: one a tick sits well inside what Spigot and Paper accept. */
-    private const val INTERVAL_TICKS = 1
-
     private val COUNTS: List<IntegerProperty> = listOf(
         BlockStateProperties.CANDLES,
         BlockStateProperties.PICKLES,
@@ -45,13 +42,11 @@ object TopUp {
     /** Settled by things other than the placement: water, and a candle being lit. */
     private val IGNORED: Set<Property<*>> = setOf(BlockStateProperties.WATERLOGGED, BlockStateProperties.LIT)
 
-    private var cooldown = 0
-
     /** The last reason given for not adding to a block, so each is said once rather than every tick. */
     private var lastSkip: String? = null
 
+    /** At most one click a tick, which sits well inside what Spigot and Paper accept. */
     fun tick(minecraft: Minecraft) {
-        if (cooldown > 0 && --cooldown > 0) return
         val player = minecraft.player ?: return
         val gameMode = minecraft.gameMode ?: return
         if (!Config.enabled || Litematica.unavailable) return
@@ -93,12 +88,12 @@ object TopUp {
 
             Log.detail("adding to {} at {}: {} of {}", existing.block.descriptionId, pos, existing.getValue(count) + 1, wanted.getValue(count))
             EasyPlaceHook.placeUnaligned(gameMode, player, hand, click)
-            cooldown = INTERVAL_TICKS
             return
         }
     }
 
     private fun skipped(pos: BlockPos, why: String) {
+        if (!Log.detailed) return
         val key = "$pos $why"
         if (key == lastSkip) return
         lastSkip = key
@@ -108,7 +103,7 @@ object TopUp {
     private fun countOf(state: BlockState): IntegerProperty? = COUNTS.firstOrNull { state.hasProperty(it) }
 
     private fun sameApartFrom(a: BlockState, b: BlockState, count: IntegerProperty): Boolean =
-        b.block.stateDefinition.properties.all { it == count || it in IGNORED || BlockStates.agree(a, b, it) }
+        Aligner.sameApartFrom(a, b) { it == count || it in IGNORED }
 
     private fun handHolding(player: LocalPlayer, wanted: BlockState): InteractionHand? {
         val item = wanted.block.asItem()
@@ -116,7 +111,6 @@ object TopUp {
     }
 
     fun forget() {
-        cooldown = 0
         lastSkip = null
     }
 }

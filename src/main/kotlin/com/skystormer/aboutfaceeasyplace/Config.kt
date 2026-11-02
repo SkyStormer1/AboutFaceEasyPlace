@@ -8,13 +8,14 @@ import java.nio.file.Files
 import java.nio.file.Path
 
 /**
- * The four things worth deciding, kept in `config/aboutfaceeasyplace.json`.
+ * The five things worth deciding, kept in `config/aboutfaceeasyplace.json`.
  *
  * Everything else about this mod is meant to need no decision: Litematica says when to act and the
  * server says whether it is needed. What is left is whether the mod runs at all, what to do with a
- * block whose orientation cannot be reached, whether to say so, and how much to log.
+ * block whose orientation cannot be reached, whether to say so, how much to log, and whether your
+ * axe may be used for you.
  *
- * Read and written by hand rather than through a config library, because four booleans do not
+ * Read and written by hand rather than through a config library, because five booleans do not
  * justify a dependency, and a config file that a missing library could stop the mod loading over
  * is a worse trade than a few lines of Gson.
  */
@@ -53,6 +54,10 @@ object Config {
     @JvmStatic
     var verboseLogging: Boolean = false
 
+    /** Whether stripped wood may be made from the unstripped kind with an axe you have ([Stripping]). */
+    @JvmStatic
+    var autoStrip: Boolean = true
+
     fun load() {
         val path = file
         try {
@@ -65,6 +70,7 @@ object Config {
             skipImpossible = json.boolean("skipImpossible", skipImpossible)
             showMessages = json.boolean("showMessages", showMessages)
             verboseLogging = json.boolean("verboseLogging", verboseLogging)
+            autoStrip = json.boolean("autoStrip", autoStrip)
         } catch (e: Exception) {
             // A config that cannot be read is not worth failing to start over. The defaults are
             // the ones most people would pick anyway.
@@ -82,6 +88,7 @@ object Config {
                 addProperty("skipImpossible", skipImpossible)
                 addProperty("showMessages", showMessages)
                 addProperty("verboseLogging", verboseLogging)
+                addProperty("autoStrip", autoStrip)
             }
             Files.writeString(path, GSON.toJson(json))
         } catch (e: Exception) {

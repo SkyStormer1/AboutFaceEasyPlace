@@ -6,7 +6,7 @@ import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper
 import net.minecraft.client.KeyMapping
 import net.minecraft.client.Minecraft
 import net.minecraft.resources.Identifier
-import org.lwjgl.glfw.GLFW
+import com.mojang.blaze3d.platform.InputConstants
 
 /**
  * About Face Easy Place — a Litematica plugin that makes Easy Place put blocks down the right way
@@ -27,20 +27,21 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
     lateinit var toggleKey: KeyMapping
         private set
 
+    /** Switches block substitution on or off in the selected placement ([Substitutions]). Starts unbound. */
+    lateinit var substitutesKey: KeyMapping
+        private set
+
     override fun onInitializeClient() {
         Config.load()
+        Substitutions.load()
         Log.info(
             "loaded. enabled={}, skipImpossible={}, showMessages={}, verboseLogging={}",
             Config.enabled, Config.skipImpossible, Config.showMessages, Config.verboseLogging,
         )
 
-        toggleKey = KeyMappingHelper.registerKeyMapping(
-            KeyMapping(
-                "key.$MOD_ID.toggle",
-                GLFW.GLFW_KEY_UNKNOWN,
-                KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main")),
-            )
-        )
+        val category = KeyMapping.Category.register(Identifier.fromNamespaceAndPath(MOD_ID, "main"))
+        toggleKey = KeyMappingHelper.registerKeyMapping(KeyMapping("key.$MOD_ID.toggle", InputConstants.UNKNOWN.value, category))
+        substitutesKey = KeyMappingHelper.registerKeyMapping(KeyMapping("key.$MOD_ID.toggle_substitutes", InputConstants.UNKNOWN.value, category))
 
         ClientTickEvents.END_CLIENT_TICK.register { client -> onTick(client) }
     }
@@ -57,6 +58,7 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
             RotationHold.forget()
             ServerTick.forget()
             FollowUp.forget()
+            Stripping.forget()
             Clicks.forget()
             TopUp.forget()
             Tweakeroo.forget()
@@ -66,9 +68,11 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
         RotationHold.tick()
         Anticipation.tick(client)
         FollowUp.tick(client)
+        Stripping.tick(client)
         TopUp.tick(client)
         Clicks.tick()
         PlacementAudit.tick(level)
+        Substitutions.tick()
 
         // Consume every press rather than only the first: a key mapping counts presses, and one
         // left on the pile would fire the next time the player joined a world.
@@ -79,6 +83,20 @@ object AboutFaceEasyPlaceClient : ClientModInitializer {
             Config.save()
             Log.info("toggled {} by keybind", if (Config.enabled) "on" else "off")
             Messages.toggled(Config.enabled)
+        }
+
+        var substituteToggles = 0
+        while (substitutesKey.consumeClick()) substituteToggles++
+        if (substituteToggles % 2 == 1) {
+            val placement = Substitutions.currentPlacement()
+            if (placement == null) {
+                Messages.substitutesNoPlacement()
+            } else {
+                val on = !Substitutions.choiceFor(placement).on
+                Substitutions.setOn(placement, on)
+                Log.info("block substitution {} in {} by keybind", if (on) "on" else "off", placement.name)
+                Messages.substitutesToggled(placement.name, on)
+            }
         }
     }
 }

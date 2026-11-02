@@ -67,6 +67,8 @@ object PlacementAudit {
     }
 
     private fun report(entry: Pending, actual: BlockState) {
+        // Put down only to be stripped, and stripped since.
+        if (Stripping.sourceOf(actual.block) === entry.wanted.block) return
         val mismatch = Aligner.orientationMismatch(actual, entry.wanted) + Adjustments.mismatch(actual, entry.wanted)
         if (mismatch.isEmpty()) return
 

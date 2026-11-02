@@ -201,7 +201,7 @@ object RotationHold {
         val keep = inForce
         inForce = null
         try {
-            connection.send(EasyPlaceHook.rotationPacket(rotation.yaw, rotation.pitch, player))
+            connection.send(ServerboundMovePlayerPacket.Rot(rotation.yaw, rotation.pitch, player.onGround(), player.horizontalCollision))
         } finally {
             inForce = keep
         }
